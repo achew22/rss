@@ -103,6 +103,30 @@ input {
     max-width: 100%;
 }
 
+.hamburger-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all var(--transition);
+}
+
+.hamburger-btn:hover {
+    background-color: var(--color-border-light);
+}
+
+.hamburger-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
 .logo {
     display: flex;
     align-items: center;
@@ -148,6 +172,24 @@ input {
 }
 
 /* Sidebar */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+    display: block;
+    opacity: 1;
+}
+
 .sidebar {
     position: fixed;
     top: var(--header-height);
@@ -158,6 +200,8 @@ input {
     border-right: 1px solid var(--color-border);
     overflow-y: auto;
     padding: 1rem;
+    transition: transform 0.3s ease;
+    z-index: 95;
 }
 
 .sidebar-header {
@@ -173,6 +217,35 @@ input {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-secondary);
+}
+
+.sidebar-close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all var(--transition);
+}
+
+.sidebar-close-btn:hover {
+    background-color: var(--color-border-light);
+    color: var(--color-text);
+}
+
+.sidebar-close-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.sidebar-actions {
+    margin-bottom: 1rem;
 }
 
 .sidebar-divider {
@@ -630,16 +703,55 @@ input {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .sidebar {
+    /* Show hamburger menu on mobile */
+    .hamburger-btn {
+        display: flex;
+    }
+
+    /* Show sidebar close button on mobile */
+    .sidebar-close-btn {
+        display: flex;
+    }
+
+    /* Hide desktop navigation on mobile */
+    .nav {
         display: none;
     }
 
+    /* Sidebar: hidden by default, slides in from left */
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Content takes full width on mobile */
     .content {
         margin-left: 0;
         max-width: 100%;
     }
 
-    .nav {
-        display: none;
+    /* Reduce padding on mobile */
+    .header-content {
+        padding: 0 1rem;
+    }
+
+    .content {
+        padding: 1rem;
+    }
+
+    /* Make logo text smaller on very small screens */
+    @media (max-width: 480px) {
+        .logo {
+            font-size: 1rem;
+        }
+
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+        }
     }
 }
