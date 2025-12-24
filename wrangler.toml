@@ -18,9 +18,15 @@ preview_urls = true
 # in the Cloudflare dashboard under Zero Trust > Access > Applications.
 # Add rss.achew22.com as a self-hosted application there.
 
-# Uncomment and configure these as needed:
-# [vars]
-# MY_VAR = "my-variable"
+# KV namespace for storing feeds and articles
+# To enable persistent storage:
+# 1. Create a KV namespace in Cloudflare dashboard or run:
+#    wrangler kv:namespace create "RSS_STORE"
+# 2. Uncomment the lines below and update the id with the returned namespace id
+#
+# [[kv_namespaces]]
+# binding = "RSS_STORE"
+# id = "your-kv-namespace-id-here"
 
 # [env.staging]
 # name = "rss-hello-world-staging"
