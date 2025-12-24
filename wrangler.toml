@@ -6,6 +6,18 @@ compatibility_flags = ["nodejs_compat"]
 # Static assets configuration
 assets = { directory = "public" }
 
+# Custom domain configuration
+routes = [
+  { pattern = "rss.achew22.com", custom_domain = true }
+]
+
+# Enable preview URLs for testing deployments
+preview_urls = true
+
+# Note: Cloudflare Access (Zero Trust authentication) must be configured
+# in the Cloudflare dashboard under Zero Trust > Access > Applications.
+# Add rss.achew22.com as a self-hosted application there.
+
 # KV namespace for storing feeds and articles
 # To enable persistent storage:
 # 1. Create a KV namespace in Cloudflare dashboard or run:
@@ -15,12 +27,6 @@ assets = { directory = "public" }
 # [[kv_namespaces]]
 # binding = "RSS_STORE"
 # id = "your-kv-namespace-id-here"
-
-# For local development, use a preview namespace
-# [[kv_namespaces]]
-# binding = "RSS_STORE"
-# id = "rss-store-placeholder"
-# preview_id = "rss-store-preview-placeholder"
 
 # [env.staging]
 # name = "rss-hello-world-staging"

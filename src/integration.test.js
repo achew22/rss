@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-const DEPLOYED_URL = "https://rss.andrew-allen-personal.workers.dev";
+const DEPLOYED_URL = "https://rss.achew22.com";
 
 describe("Integration: Deployed Worker", () => {
   it("serves the SPA frontend at root", async () => {
