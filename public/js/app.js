@@ -544,8 +544,31 @@ async function addFeed(url, name) {
     try {
         const result = await addFeedApi(url, name);
 
-        // Refresh feeds and articles
-        await Promise.all([fetchFeeds(), fetchArticles()]);
+        // Use the articles returned directly from the API response
+        // This ensures articles display immediately even if KV has consistency delays
+        if (result.articles && result.articles.length > 0) {
+            // Merge new articles with existing ones
+            const existingIds = new Set(state.articles.map(a => a.id));
+            const newArticles = result.articles.filter(a => !existingIds.has(a.id));
+            state.articles = [...state.articles, ...newArticles];
+        }
+
+        // Add the new feed to state
+        if (result.feed) {
+            const existingFeedIds = new Set(state.feeds.map(f => f.id));
+            if (!existingFeedIds.has(result.feed.id)) {
+                state.feeds.push(result.feed);
+            }
+        }
+
+        // Also refresh from server to ensure we have the latest data
+        // (this will update counts and catch any articles we might have missed)
+        try {
+            await Promise.all([fetchFeeds(), fetchArticles()]);
+        } catch (refreshError) {
+            // If refresh fails, we still have the data from the API response
+            console.warn('Failed to refresh data from server:', refreshError);
+        }
 
         renderUserFeeds();
         updateCounts();
