@@ -19,14 +19,11 @@ preview_urls = true
 # Add rss.achew22.com as a self-hosted application there.
 
 # KV namespace for storing feeds and articles
-# To enable persistent storage:
-# 1. Create a KV namespace in Cloudflare dashboard or run:
-#    wrangler kv:namespace create "RSS_STORE"
-# 2. Uncomment the lines below and update the id with the returned namespace id
-#
-# [[kv_namespaces]]
-# binding = "RSS_STORE"
-# id = "your-kv-namespace-id-here"
+# Created using: npx wrangler kv namespace create RSS_STORE
+# IMPORTANT: Replace the id below with the actual namespace id from the command output
+[[kv_namespaces]]
+binding = "RSS_STORE"
+id = "963c1a03867a419aa31a22a85ae2d279"
 
 # Cron trigger for automatic feed fetching
 # Runs every 15 minutes to fetch new articles from all subscribed feeds
