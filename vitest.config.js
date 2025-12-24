@@ -6,6 +6,10 @@ export default defineWorkersConfig({
     poolOptions: {
       workers: {
         wrangler: { configPath: "./wrangler.toml" },
+        miniflare: {
+          // Provide a mock KV namespace for testing
+          kvNamespaces: ["RSS_STORE"],
+        },
       },
     },
   },

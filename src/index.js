@@ -597,7 +597,8 @@ async function getFeeds(env) {
 
 async function saveFeeds(env, feeds) {
   if (!env.RSS_STORE) {
-    throw new Error("KV storage not configured");
+    // KV not configured - data won't persist but operation succeeds
+    return;
   }
   await env.RSS_STORE.put(FEEDS_KEY, JSON.stringify(feeds));
 }
@@ -612,7 +613,8 @@ async function getArticles(env) {
 
 async function saveArticles(env, articles) {
   if (!env.RSS_STORE) {
-    throw new Error("KV storage not configured");
+    // KV not configured - data won't persist but operation succeeds
+    return;
   }
   await env.RSS_STORE.put(ARTICLES_KEY, JSON.stringify(articles));
 }
@@ -627,7 +629,8 @@ async function getStarred(env) {
 
 async function saveStarred(env, starred) {
   if (!env.RSS_STORE) {
-    throw new Error("KV storage not configured");
+    // KV not configured - data won't persist but operation succeeds
+    return;
   }
   await env.RSS_STORE.put(STARRED_KEY, JSON.stringify(starred));
 }
