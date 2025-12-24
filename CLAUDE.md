@@ -55,6 +55,19 @@ E2E test artifacts (screenshots, reports) are uploaded as GitHub Actions artifac
 
 ## Pull Request Workflow
 
+### IMPORTANT: Run Tests Locally Before Pushing
+
+Before pushing any changes:
+
+1. **Run unit tests locally** and ensure they pass:
+   ```bash
+   npm test
+   ```
+
+2. **Do NOT push if tests are failing locally** - Fix the issues first
+
+3. **The task is NOT complete if local tests fail**
+
 ### IMPORTANT: Monitor CI Checks After Pushing
 
 After pushing a PR or commits to a branch:
