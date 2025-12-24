@@ -212,10 +212,18 @@ async function handleAddFeed(request, env, corsHeaders) {
 
   await saveArticles(env, [...articles, ...newArticles]);
 
+  // Return the new articles directly so the frontend can display them immediately
+  // without needing to fetch from KV (which may have consistency delays or not be configured)
+  const articlesWithStarred = newArticles.map((a) => ({
+    ...a,
+    starred: false,
+  }));
+
   return jsonResponse(
     {
       feed: { ...newFeed, count: newArticles.length },
       articlesAdded: newArticles.length,
+      articles: articlesWithStarred,
     },
     corsHeaders,
     201
