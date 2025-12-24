@@ -25,6 +25,16 @@ export default {
     // Return 404 for unknown routes (static assets are handled by Wrangler)
     return new Response("Not Found", { status: 404 });
   },
+
+  /**
+   * Scheduled handler for cron triggers
+   * Automatically refreshes all feeds on a schedule
+   */
+  async scheduled(event, env, ctx) {
+    console.log(`Cron triggered at ${new Date().toISOString()}`);
+    const results = await refreshAllFeeds(env);
+    console.log("Feed refresh results:", JSON.stringify(results));
+  },
 };
 
 /**
@@ -303,9 +313,10 @@ async function handleRefreshFeed(feedId, env, corsHeaders) {
 }
 
 /**
- * Refresh all feeds
+ * Core function to refresh all feeds
+ * Used by both the API endpoint and scheduled cron handler
  */
-async function handleRefreshAll(env, corsHeaders) {
+async function refreshAllFeeds(env) {
   const feeds = await getFeeds(env);
   const results = [];
 
@@ -345,6 +356,14 @@ async function handleRefreshAll(env, corsHeaders) {
 
   await saveFeeds(env, feeds);
 
+  return results;
+}
+
+/**
+ * Refresh all feeds (API handler)
+ */
+async function handleRefreshAll(env, corsHeaders) {
+  const results = await refreshAllFeeds(env);
   return jsonResponse({ results }, corsHeaders);
 }
 
