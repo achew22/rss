@@ -1,0 +1,13 @@
+name = "rss-hello-world"
+main = "src/index.js"
+compatibility_date = "2024-12-24"
+
+# Uncomment and configure these as needed:
+# [vars]
+# MY_VAR = "my-variable"
+
+# [env.staging]
+# name = "rss-hello-world-staging"
+
+# [env.production]
+# name = "rss-hello-world"
