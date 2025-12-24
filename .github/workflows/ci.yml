@@ -30,10 +30,15 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -49,6 +54,15 @@ jobs:
 
       - name: Run E2E tests
         run: npm run test:e2e
+
+      - name: Commit screenshots to repo
+        if: success()
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add e2e/screenshots/
+          git diff --staged --quiet || git commit -m "Update E2E screenshots [skip ci]"
+          git push
 
       - name: Upload E2E screenshots
         uses: actions/upload-artifact@v4

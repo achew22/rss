@@ -20,4 +20,3 @@ node_modules/
 # Playwright
 playwright-report/
 e2e/test-results/
-e2e/screenshots/
