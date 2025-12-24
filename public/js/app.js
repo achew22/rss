@@ -29,7 +29,11 @@ const elements = {
     closeModal: document.getElementById('closeModal'),
     cancelAddFeed: document.getElementById('cancelAddFeed'),
     allCount: document.getElementById('allCount'),
-    starredCount: document.getElementById('starredCount')
+    starredCount: document.getElementById('starredCount'),
+    hamburgerBtn: document.getElementById('hamburgerBtn'),
+    sidebar: document.getElementById('sidebar'),
+    sidebarOverlay: document.getElementById('sidebarOverlay'),
+    sidebarCloseBtn: document.getElementById('sidebarCloseBtn')
 };
 
 // Router
@@ -505,6 +509,9 @@ async function selectFeed(feedId) {
         item.classList.toggle('active', item.dataset.feed == feedId);
     });
 
+    // Close sidebar on mobile when a feed is selected
+    closeSidebar();
+
     // Fetch articles for the selected feed
     try {
         if (feedId === 'starred') {
@@ -664,6 +671,34 @@ async function refreshAllFeeds() {
     }
 }
 
+// ============================================================================
+// Mobile Navigation
+// ============================================================================
+
+function toggleSidebar() {
+    const isOpen = elements.sidebar.classList.contains('open');
+
+    if (isOpen) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+}
+
+function openSidebar() {
+    elements.sidebar.classList.add('open');
+    elements.sidebarOverlay.classList.add('active');
+    // Prevent body scroll when sidebar is open on mobile
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSidebar() {
+    elements.sidebar.classList.remove('open');
+    elements.sidebarOverlay.classList.remove('active');
+    // Re-enable body scroll
+    document.body.style.overflow = '';
+}
+
 // Make functions globally available
 window.openAddFeedModal = openAddFeedModal;
 window.navigate = navigate;
@@ -683,6 +718,11 @@ function initEventListeners() {
             navigate(link.dataset.route);
         });
     });
+
+    // Mobile navigation
+    elements.hamburgerBtn.addEventListener('click', toggleSidebar);
+    elements.sidebarCloseBtn.addEventListener('click', closeSidebar);
+    elements.sidebarOverlay.addEventListener('click', closeSidebar);
 
     // Feed selection in sidebar
     elements.feedList.querySelectorAll('.feed-item').forEach(item => {
