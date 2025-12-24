@@ -7,12 +7,14 @@ compatibility_flags = ["nodejs_compat"]
 assets = { directory = "public" }
 
 # KV namespace for storing feeds and articles
-# To create the KV namespace, run:
-#   wrangler kv:namespace create "RSS_STORE"
-# Then update the id below with the returned id
-[[kv_namespaces]]
-binding = "RSS_STORE"
-id = "rss-store-placeholder"
+# To enable persistent storage:
+# 1. Create a KV namespace in Cloudflare dashboard or run:
+#    wrangler kv:namespace create "RSS_STORE"
+# 2. Uncomment the lines below and update the id with the returned namespace id
+#
+# [[kv_namespaces]]
+# binding = "RSS_STORE"
+# id = "your-kv-namespace-id-here"
 
 # For local development, use a preview namespace
 # [[kv_namespaces]]
