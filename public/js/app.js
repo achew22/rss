@@ -1,7 +1,11 @@
 /**
  * RSS Reader SPA
- * A simple single-page application for reading RSS feeds
+ * A single-page application for reading RSS feeds
+ * Connects to Cloudflare Workers backend API
  */
+
+// API base URL - empty string for same-origin requests
+const API_BASE = '';
 
 // Application State
 const state = {
@@ -9,58 +13,10 @@ const state = {
     articles: [],
     starredArticles: new Set(),
     currentFeed: 'all',
-    currentRoute: '/'
+    currentRoute: '/',
+    loading: false,
+    error: null
 };
-
-// Sample data for demonstration
-const sampleArticles = [
-    {
-        id: 1,
-        title: 'Getting Started with RSS Feeds',
-        excerpt: 'RSS (Really Simple Syndication) is a web feed that allows users and applications to access updates to websites in a standardized, computer-readable format. Learn how to make the most of RSS feeds to stay updated with your favorite content.',
-        source: 'RSS Guide',
-        sourceUrl: 'https://example.com',
-        date: new Date().toISOString(),
-        read: false
-    },
-    {
-        id: 2,
-        title: 'The Future of Content Consumption',
-        excerpt: 'As social media algorithms become more opaque, many users are returning to RSS as a way to curate their own content feed. Discover why RSS is making a comeback and how it can help you take control of your information diet.',
-        source: 'Tech Insights',
-        sourceUrl: 'https://example.com',
-        date: new Date(Date.now() - 3600000).toISOString(),
-        read: false
-    },
-    {
-        id: 3,
-        title: 'Building a Modern RSS Reader',
-        excerpt: 'In this tutorial, we will walk through the process of building a modern RSS reader using web technologies. From parsing feeds to displaying articles, you will learn everything you need to create your own reader.',
-        source: 'Dev Blog',
-        sourceUrl: 'https://example.com',
-        date: new Date(Date.now() - 7200000).toISOString(),
-        read: true
-    },
-    {
-        id: 4,
-        title: 'Top 10 RSS Feeds for Developers',
-        excerpt: 'Stay up to date with the latest in software development by following these essential RSS feeds. From JavaScript to DevOps, these feeds cover everything a modern developer needs to know.',
-        source: 'Code Weekly',
-        sourceUrl: 'https://example.com',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        read: false
-    }
-];
-
-const sampleFeeds = [
-    { id: 1, name: 'Tech News', url: 'https://example.com/tech/feed.xml', count: 12 },
-    { id: 2, name: 'Dev Blog', url: 'https://example.com/dev/feed.xml', count: 8 },
-    { id: 3, name: 'Design Weekly', url: 'https://example.com/design/feed.xml', count: 5 }
-];
-
-// Initialize state with sample data
-state.articles = sampleArticles;
-state.feeds = sampleFeeds;
 
 // DOM Elements
 const elements = {
@@ -83,6 +39,113 @@ const routes = {
     '/settings': renderSettings
 };
 
+// ============================================================================
+// API Functions
+// ============================================================================
+
+async function apiRequest(endpoint, options = {}) {
+    const url = `${API_BASE}${endpoint}`;
+    const config = {
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        },
+        ...options
+    };
+
+    const response = await fetch(url, config);
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || data.message || 'API request failed');
+    }
+
+    return data;
+}
+
+async function fetchFeeds() {
+    try {
+        const data = await apiRequest('/api/feeds');
+        state.feeds = data.feeds || [];
+        return state.feeds;
+    } catch (error) {
+        console.error('Failed to fetch feeds:', error);
+        state.feeds = [];
+        throw error;
+    }
+}
+
+async function fetchArticles(feedId = null, starredOnly = false) {
+    try {
+        let endpoint = '/api/articles';
+        const params = new URLSearchParams();
+
+        if (feedId && feedId !== 'all' && feedId !== 'starred') {
+            params.set('feedId', feedId);
+        }
+        if (starredOnly) {
+            params.set('starred', 'true');
+        }
+
+        if (params.toString()) {
+            endpoint += `?${params.toString()}`;
+        }
+
+        const data = await apiRequest(endpoint);
+        state.articles = data.articles || [];
+
+        // Update starred articles set from API response
+        state.starredArticles = new Set(
+            state.articles.filter(a => a.starred).map(a => a.id)
+        );
+
+        return state.articles;
+    } catch (error) {
+        console.error('Failed to fetch articles:', error);
+        state.articles = [];
+        throw error;
+    }
+}
+
+async function addFeedApi(url, name) {
+    const data = await apiRequest('/api/feeds', {
+        method: 'POST',
+        body: JSON.stringify({ url, name })
+    });
+    return data;
+}
+
+async function removeFeedApi(feedId) {
+    await apiRequest(`/api/feeds/${feedId}`, {
+        method: 'DELETE'
+    });
+}
+
+async function toggleStarApi(articleId) {
+    const data = await apiRequest(`/api/articles/${articleId}/star`, {
+        method: 'POST'
+    });
+    return data;
+}
+
+async function refreshFeedApi(feedId) {
+    const data = await apiRequest(`/api/feeds/${feedId}/refresh`, {
+        method: 'POST'
+    });
+    return data;
+}
+
+async function refreshAllFeedsApi() {
+    const data = await apiRequest('/api/refresh', {
+        method: 'POST'
+    });
+    return data;
+}
+
+// ============================================================================
+// Navigation
+// ============================================================================
+
 function navigate(path) {
     state.currentRoute = path;
     window.location.hash = path;
@@ -102,7 +165,10 @@ function handleHashChange() {
     navigate(path);
 }
 
+// ============================================================================
 // Renderers
+// ============================================================================
+
 function renderHome() {
     const articles = getFilteredArticles();
     const feedName = getFeedName(state.currentFeed);
@@ -113,7 +179,15 @@ function renderHome() {
                 <h2>${feedName}</h2>
                 <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}</p>
             </div>
+            <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Refresh
+            </button>
         </div>
+        ${state.loading ? renderLoading() : ''}
+        ${state.error ? renderError(state.error) : ''}
         <div class="articles-grid">
             ${articles.length > 0 ? articles.map(renderArticleCard).join('') : renderEmptyState()}
         </div>
@@ -123,7 +197,17 @@ function renderHome() {
     elements.content.querySelectorAll('.article-action-star').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            toggleStar(parseInt(btn.dataset.id));
+            toggleStar(btn.dataset.id);
+        });
+    });
+
+    // Add click handler for article cards to open the link
+    elements.content.querySelectorAll('.article-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const link = card.dataset.link;
+            if (link) {
+                window.open(link, '_blank');
+            }
         });
     });
 }
@@ -133,7 +217,7 @@ function renderArticleCard(article) {
     const timeAgo = formatTimeAgo(new Date(article.date));
 
     return `
-        <article class="article-card" data-id="${article.id}">
+        <article class="article-card" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
             <div class="article-card-header">
                 <h3 class="article-title">${escapeHtml(article.title)}</h3>
                 <div class="article-actions">
@@ -153,6 +237,23 @@ function renderArticleCard(article) {
                 <span>${timeAgo}</span>
             </div>
         </article>
+    `;
+}
+
+function renderLoading() {
+    return `
+        <div class="loading-indicator">
+            <div class="loading-spinner"></div>
+            <span>Loading...</span>
+        </div>
+    `;
+}
+
+function renderError(message) {
+    return `
+        <div class="error-message">
+            <strong>Error:</strong> ${escapeHtml(message)}
+        </div>
     `;
 }
 
@@ -186,8 +287,16 @@ function renderFeeds() {
                     <div>
                         <div class="settings-label">${escapeHtml(feed.name)}</div>
                         <div class="settings-description">${escapeHtml(feed.url)}</div>
+                        <div class="settings-meta">${feed.count || 0} articles</div>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="removeFeed(${feed.id})">Remove</button>
+                    <div class="settings-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="refreshFeed('${feed.id}')" title="Refresh feed">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="removeFeed('${feed.id}')">Remove</button>
+                    </div>
                 </div>
             `).join('')}
             ${state.feeds.length === 0 ? `
@@ -240,38 +349,14 @@ function renderSettings() {
         </div>
         <div class="settings-section">
             <div class="settings-section-header">
-                <h3>Refresh</h3>
-            </div>
-            <div class="settings-item">
-                <div>
-                    <div class="settings-label">Auto-refresh interval</div>
-                    <div class="settings-description">How often to check for new articles</div>
-                </div>
-                <select class="btn btn-secondary btn-sm">
-                    <option>15 minutes</option>
-                    <option>30 minutes</option>
-                    <option>1 hour</option>
-                    <option>Manual only</option>
-                </select>
-            </div>
-        </div>
-        <div class="settings-section">
-            <div class="settings-section-header">
                 <h3>Data</h3>
             </div>
             <div class="settings-item">
                 <div>
-                    <div class="settings-label">Export feeds</div>
-                    <div class="settings-description">Download your feed list as OPML</div>
+                    <div class="settings-label">Refresh all feeds</div>
+                    <div class="settings-description">Fetch latest articles from all subscribed feeds</div>
                 </div>
-                <button class="btn btn-secondary btn-sm">Export</button>
-            </div>
-            <div class="settings-item">
-                <div>
-                    <div class="settings-label">Import feeds</div>
-                    <div class="settings-description">Import feeds from an OPML file</div>
-                </div>
-                <button class="btn btn-secondary btn-sm">Import</button>
+                <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()">Refresh Now</button>
             </div>
         </div>
     `;
@@ -289,7 +374,10 @@ function renderNotFound() {
     `;
 }
 
+// ============================================================================
 // Helper Functions
+// ============================================================================
+
 function getFilteredArticles() {
     if (state.currentFeed === 'all') {
         return state.articles;
@@ -307,14 +395,22 @@ function getFeedName(feedId) {
     return feed ? feed.name : 'Unknown Feed';
 }
 
-function toggleStar(articleId) {
-    if (state.starredArticles.has(articleId)) {
-        state.starredArticles.delete(articleId);
-    } else {
-        state.starredArticles.add(articleId);
+async function toggleStar(articleId) {
+    try {
+        const result = await toggleStarApi(articleId);
+
+        if (result.starred) {
+            state.starredArticles.add(articleId);
+        } else {
+            state.starredArticles.delete(articleId);
+        }
+
+        updateCounts();
+        renderHome();
+    } catch (error) {
+        console.error('Failed to toggle star:', error);
+        showNotification('Failed to update star status', 'error');
     }
-    updateCounts();
-    renderHome();
 }
 
 function updateCounts() {
@@ -345,12 +441,43 @@ function formatTimeAgo(date) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
+function showNotification(message, type = 'info') {
+    // Simple notification - could be enhanced with a proper toast library
+    console.log(`[${type.toUpperCase()}] ${message}`);
+
+    // Create a simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'};
+        color: white;
+        border-radius: 8px;
+        z-index: 10000;
+        animation: fadeIn 0.3s ease;
+    `;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// ============================================================================
 // Feed Management
+// ============================================================================
+
 function renderUserFeeds() {
     elements.userFeeds.innerHTML = state.feeds.map(feed => `
         <li class="feed-item" data-feed="${feed.id}">
@@ -360,23 +487,36 @@ function renderUserFeeds() {
                 </svg>
             </span>
             <span class="feed-name">${escapeHtml(feed.name)}</span>
-            <span class="feed-count">${feed.count}</span>
+            <span class="feed-count">${feed.count || 0}</span>
         </li>
     `).join('');
 
     // Add click handlers
     elements.userFeeds.querySelectorAll('.feed-item').forEach(item => {
-        item.addEventListener('click', () => selectFeed(parseInt(item.dataset.feed)));
+        item.addEventListener('click', () => selectFeed(item.dataset.feed));
     });
 }
 
-function selectFeed(feedId) {
+async function selectFeed(feedId) {
     state.currentFeed = feedId;
 
     // Update active states
     document.querySelectorAll('.feed-item').forEach(item => {
         item.classList.toggle('active', item.dataset.feed == feedId);
     });
+
+    // Fetch articles for the selected feed
+    try {
+        if (feedId === 'starred') {
+            await fetchArticles(null, true);
+        } else if (feedId === 'all') {
+            await fetchArticles();
+        } else {
+            await fetchArticles(feedId);
+        }
+    } catch (error) {
+        console.error('Failed to fetch articles for feed:', error);
+    }
 
     renderHome();
 }
@@ -390,38 +530,128 @@ function openAddFeedModal() {
 function closeAddFeedModal() {
     elements.addFeedModal.classList.remove('active');
     elements.addFeedForm.reset();
+    // Remove any loading state
+    const submitBtn = elements.addFeedForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Add Feed';
 }
 
-function addFeed(url, name) {
-    const newFeed = {
-        id: Date.now(),
-        name: name || new URL(url).hostname,
-        url: url,
-        count: 0
-    };
+async function addFeed(url, name) {
+    const submitBtn = elements.addFeedForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
 
-    state.feeds.push(newFeed);
-    renderUserFeeds();
-    closeAddFeedModal();
+    try {
+        const result = await addFeedApi(url, name);
 
-    // Navigate to feeds page to show the new feed
-    if (state.currentRoute === '/feeds') {
-        renderFeeds();
+        // Refresh feeds and articles
+        await Promise.all([fetchFeeds(), fetchArticles()]);
+
+        renderUserFeeds();
+        updateCounts();
+        closeAddFeedModal();
+
+        showNotification(`Added "${result.feed.name}" with ${result.articlesAdded} articles`, 'success');
+
+        // Navigate to feeds page to show the new feed
+        if (state.currentRoute === '/feeds') {
+            renderFeeds();
+        } else {
+            renderHome();
+        }
+    } catch (error) {
+        console.error('Failed to add feed:', error);
+        showNotification(error.message || 'Failed to add feed', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Feed';
     }
 }
 
-function removeFeed(feedId) {
-    state.feeds = state.feeds.filter(f => f.id !== feedId);
-    renderUserFeeds();
-    renderFeeds();
+async function removeFeed(feedId) {
+    if (!confirm('Are you sure you want to remove this feed? All articles from this feed will be deleted.')) {
+        return;
+    }
+
+    try {
+        await removeFeedApi(feedId);
+
+        // Refresh data
+        await Promise.all([fetchFeeds(), fetchArticles()]);
+
+        renderUserFeeds();
+        updateCounts();
+        renderFeeds();
+
+        showNotification('Feed removed successfully', 'success');
+    } catch (error) {
+        console.error('Failed to remove feed:', error);
+        showNotification(error.message || 'Failed to remove feed', 'error');
+    }
+}
+
+async function refreshFeed(feedId) {
+    showNotification('Refreshing feed...', 'info');
+
+    try {
+        const result = await refreshFeedApi(feedId);
+
+        // Refresh data
+        await Promise.all([fetchFeeds(), fetchArticles()]);
+
+        renderUserFeeds();
+        updateCounts();
+
+        if (state.currentRoute === '/feeds') {
+            renderFeeds();
+        } else {
+            renderHome();
+        }
+
+        showNotification(`Found ${result.newArticles} new articles`, 'success');
+    } catch (error) {
+        console.error('Failed to refresh feed:', error);
+        showNotification(error.message || 'Failed to refresh feed', 'error');
+    }
+}
+
+async function refreshAllFeeds() {
+    showNotification('Refreshing all feeds...', 'info');
+
+    try {
+        const result = await refreshAllFeedsApi();
+
+        // Refresh data
+        await Promise.all([fetchFeeds(), fetchArticles()]);
+
+        renderUserFeeds();
+        updateCounts();
+        renderHome();
+
+        const totalNew = result.results.reduce((sum, r) => sum + (r.newArticles || 0), 0);
+        const errors = result.results.filter(r => r.error).length;
+
+        if (errors > 0) {
+            showNotification(`Found ${totalNew} new articles (${errors} feeds failed)`, 'error');
+        } else {
+            showNotification(`Found ${totalNew} new articles`, 'success');
+        }
+    } catch (error) {
+        console.error('Failed to refresh feeds:', error);
+        showNotification(error.message || 'Failed to refresh feeds', 'error');
+    }
 }
 
 // Make functions globally available
 window.openAddFeedModal = openAddFeedModal;
 window.navigate = navigate;
 window.removeFeed = removeFeed;
+window.refreshFeed = refreshFeed;
+window.refreshAllFeeds = refreshAllFeeds;
 
+// ============================================================================
 // Event Listeners
+// ============================================================================
+
 function initEventListeners() {
     // Navigation
     document.querySelectorAll('.nav-link').forEach(link => {
@@ -456,9 +686,26 @@ function initEventListeners() {
     window.addEventListener('hashchange', handleHashChange);
 }
 
+// ============================================================================
 // Initialize App
-function init() {
+// ============================================================================
+
+async function init() {
     initEventListeners();
+
+    // Load initial data from API
+    state.loading = true;
+
+    try {
+        await Promise.all([fetchFeeds(), fetchArticles()]);
+        state.error = null;
+    } catch (error) {
+        console.error('Failed to load initial data:', error);
+        state.error = 'Failed to load data. Please try again later.';
+    }
+
+    state.loading = false;
+
     renderUserFeeds();
     updateCounts();
     handleHashChange();

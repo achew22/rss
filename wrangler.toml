@@ -6,9 +6,19 @@ compatibility_flags = ["nodejs_compat"]
 # Static assets configuration
 assets = { directory = "public" }
 
-# Uncomment and configure these as needed:
-# [vars]
-# MY_VAR = "my-variable"
+# KV namespace for storing feeds and articles
+# To create the KV namespace, run:
+#   wrangler kv:namespace create "RSS_STORE"
+# Then update the id below with the returned id
+[[kv_namespaces]]
+binding = "RSS_STORE"
+id = "rss-store-placeholder"
+
+# For local development, use a preview namespace
+# [[kv_namespaces]]
+# binding = "RSS_STORE"
+# id = "rss-store-placeholder"
+# preview_id = "rss-store-preview-placeholder"
 
 # [env.staging]
 # name = "rss-hello-world-staging"
