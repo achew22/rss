@@ -3,6 +3,9 @@ main = "src/index.js"
 compatibility_date = "2024-12-24"
 compatibility_flags = ["nodejs_compat"]
 
+# Static assets configuration
+assets = { directory = "public" }
+
 # Uncomment and configure these as needed:
 # [vars]
 # MY_VAR = "my-variable"

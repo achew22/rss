@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Reader</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/>
+                    </svg>
+                    RSS Reader
+                </h1>
+                <nav class="nav">
+                    <a href="#/" class="nav-link active" data-route="/">Home</a>
+                    <a href="#/feeds" class="nav-link" data-route="/feeds">Feeds</a>
+                    <a href="#/settings" class="nav-link" data-route="/settings">Settings</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Your Feeds</h2>
+                    <button class="btn btn-primary btn-sm" id="addFeedBtn">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Add Feed
+                    </button>
+                </div>
+                <ul class="feed-list" id="feedList">
+                    <li class="feed-item active" data-feed="all">
+                        <span class="feed-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                            </svg>
+                        </span>
+                        <span class="feed-name">All Articles</span>
+                        <span class="feed-count" id="allCount">0</span>
+                    </li>
+                    <li class="feed-item" data-feed="starred">
+                        <span class="feed-icon starred">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                        </span>
+                        <span class="feed-name">Starred</span>
+                        <span class="feed-count" id="starredCount">0</span>
+                    </li>
+                </ul>
+                <div class="sidebar-divider"></div>
+                <ul class="feed-list" id="userFeeds">
+                    <!-- User feeds will be added here -->
+                </ul>
+            </aside>
+
+            <section class="content" id="content">
+                <!-- Dynamic content will be loaded here -->
+            </section>
+        </main>
+
+        <!-- Add Feed Modal -->
+        <div class="modal" id="addFeedModal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add New Feed</h3>
+                    <button class="modal-close" id="closeModal">&times;</button>
+                </div>
+                <form id="addFeedForm">
+                    <div class="form-group">
+                        <label for="feedUrl">Feed URL</label>
+                        <input type="url" id="feedUrl" placeholder="https://example.com/feed.xml" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedName">Feed Name (optional)</label>
+                        <input type="text" id="feedName" placeholder="My Favorite Blog">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelAddFeed">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Feed</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
