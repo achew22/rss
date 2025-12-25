@@ -11,6 +11,10 @@ export default defineConfig({
   // Match test files
   testMatch: '**/*.e2e.js',
 
+  // Global setup and teardown
+  globalSetup: './e2e/global-setup.js',
+  globalTeardown: './e2e/global-teardown.js',
+
   // Run tests in parallel
   fullyParallel: false,
 
