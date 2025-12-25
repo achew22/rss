@@ -11,8 +11,8 @@ import {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetBetweenTests,
-  getWorkerUrl,
 } from './setup.js';
+import { getWorkerUrl } from './test-helper.js';
 
 test.describe('Basic Functionality', () => {
   test.beforeAll(async () => {

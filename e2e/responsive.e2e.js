@@ -11,8 +11,8 @@ import {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetBetweenTests,
-  getWorkerUrl,
 } from './setup.js';
+import { getWorkerUrl } from './test-helper.js';
 
 test.describe('Responsive Design', () => {
   test.beforeAll(async () => {

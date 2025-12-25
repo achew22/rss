@@ -13,10 +13,6 @@ import {
   getMockServer,
 } from './test-helper.js';
 
-// Shared state for the test suite
-let workerUrl = null;
-let mockServerUrl = null;
-
 /**
  * Initialize the test environment
  * Starts the mock RSS server and the RSS Worker
@@ -26,20 +22,16 @@ export async function setupTestEnvironment() {
 
   // Start the mock RSS server first
   const mockServer = await startMockServer(3001);
-  mockServerUrl = mockServer.getUrl();
-  console.log(`Mock RSS server started at ${mockServerUrl}`);
+  console.log(`Mock RSS server started at ${mockServer.getUrl()}`);
 
   // Start the worker
   console.log('Starting RSS Worker...');
-  const worker = await startWorker({ port: 8787 });
-  workerUrl = `http://localhost:8787`;
-  console.log(`RSS Worker started at ${workerUrl}`);
+  await startWorker({ port: 8787 });
+  console.log(`RSS Worker started at http://localhost:8787`);
 
   // Give servers time to fully initialize
   await new Promise(resolve => setTimeout(resolve, 2000));
   console.log('Test setup complete');
-
-  return { workerUrl, mockServerUrl };
 }
 
 /**
@@ -62,24 +54,4 @@ export async function resetBetweenTests() {
   if (mockServer) {
     mockServer.reset();
   }
-}
-
-/**
- * Get the worker URL for tests
- */
-export function getWorkerUrl() {
-  if (!workerUrl) {
-    throw new Error('Worker URL not initialized. Call setupTestEnvironment() first.');
-  }
-  return workerUrl;
-}
-
-/**
- * Get the mock server URL for tests
- */
-export function getMockServerUrl() {
-  if (!mockServerUrl) {
-    throw new Error('Mock server URL not initialized. Call setupTestEnvironment() first.');
-  }
-  return mockServerUrl;
 }

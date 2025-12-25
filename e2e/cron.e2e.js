@@ -10,8 +10,6 @@ import {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetBetweenTests,
-  getWorkerUrl,
-  getMockServerUrl,
 } from './setup.js';
 import {
   addFeed,
@@ -19,6 +17,7 @@ import {
   getArticles,
   triggerCron,
   getMockServer,
+  getWorkerUrl,
 } from './test-helper.js';
 
 test.describe('Cron Functionality', () => {
@@ -36,7 +35,7 @@ test.describe('Cron Functionality', () => {
 
   test('05 - cron job fetches new articles', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Add feed
     const feeds = await getFeeds();

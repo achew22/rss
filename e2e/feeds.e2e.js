@@ -12,10 +12,8 @@ import {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetBetweenTests,
-  getWorkerUrl,
-  getMockServerUrl,
 } from './setup.js';
-import { addFeed, getFeeds } from './test-helper.js';
+import { addFeed, getFeeds, getWorkerUrl, getMockServer } from './test-helper.js';
 
 test.describe('Feed Management', () => {
   test.beforeAll(async () => {
@@ -32,7 +30,7 @@ test.describe('Feed Management', () => {
 
   test('03 - can add feed and see articles', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Add feed via API
     console.log('Adding feed via API...');
@@ -58,7 +56,7 @@ test.describe('Feed Management', () => {
 
   test('04 - feeds page shows subscriptions', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Ensure we have a feed
     const feeds = await getFeeds();
@@ -81,7 +79,7 @@ test.describe('Feed Management', () => {
 
   test('07 - Atom feed support', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Add Atom feed
     await addFeed(`${mockServerUrl}/feeds/tech-news/atom`, 'Tech Atom');

@@ -13,10 +13,8 @@ import {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetBetweenTests,
-  getWorkerUrl,
-  getMockServerUrl,
 } from './setup.js';
-import { addFeed, getFeeds } from './test-helper.js';
+import { addFeed, getFeeds, getWorkerUrl, getMockServer } from './test-helper.js';
 
 test.describe('Read Tracking', () => {
   test.beforeAll(async () => {
@@ -33,7 +31,7 @@ test.describe('Read Tracking', () => {
 
   test('08 - manually mark article as read/unread', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Ensure we have some articles
     const feeds = await getFeeds();
@@ -103,7 +101,7 @@ test.describe('Read Tracking', () => {
 
   test('09 - filter toggle hides/shows read articles', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Ensure we have some articles
     const feeds = await getFeeds();
@@ -170,7 +168,7 @@ test.describe('Read Tracking', () => {
 
   test('10 - scroll marking articles as read', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Ensure we have some articles
     const feeds = await getFeeds();
@@ -236,7 +234,7 @@ test.describe('Read Tracking', () => {
 
   test('11 - read state persists across page reloads', async ({ page }) => {
     const workerUrl = getWorkerUrl();
-    const mockServerUrl = getMockServerUrl();
+    const mockServerUrl = getMockServer().getUrl();
 
     // Ensure we have some articles
     const feeds = await getFeeds();
