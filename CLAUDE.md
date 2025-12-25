@@ -45,13 +45,27 @@ Located in `src/*.test.js`, run with Vitest using the Cloudflare Workers pool.
 Located in `src/integration.test.js`, run against the deployed worker.
 
 ### E2E Tests
-Located in `e2e/*.e2e.js`, run with Playwright. These tests:
+Located in `e2e/*.e2e.js`, run with Playwright. Tests are organized into logical modules:
+- `basic.e2e.js` - Homepage and API health checks
+- `feeds.e2e.js` - Feed management (add feed, feeds page, Atom support)
+- `cron.e2e.js` - Cron job functionality
+- `read-tracking.e2e.js` - Read tracking features (manual, filter, scroll, persistence)
+- `responsive.e2e.js` - Mobile layout and responsive design
+- `setup.js` - Shared test infrastructure (setup/teardown functions)
+
+These tests:
 1. Spin up the RSS Worker using Miniflare (via wrangler's unstable_dev)
 2. Spin up a mock RSS feed server with sample feeds
 3. Test the full application flow in a real browser
 4. Take screenshots demonstrating functionality
 
 E2E test artifacts (screenshots, reports) are uploaded as GitHub Actions artifacts.
+
+**E2E Screenshots Workflow:**
+- Screenshots are automatically generated when E2E tests run
+- **CI generates canonical screenshots**: After successful E2E tests, GitHub Actions commits updated screenshots
+- **Local development**: You can run `npm run test:e2e` locally to verify tests pass, but screenshots may differ slightly due to environment differences
+- **Best practice**: Let CI generate and commit screenshots for consistency. If you need to update screenshots, ensure E2E tests pass in CI.
 
 ## Pull Request Workflow
 
@@ -64,9 +78,15 @@ Before pushing any changes:
    npm test
    ```
 
-2. **Do NOT push if tests are failing locally** - Fix the issues first
+2. **Optionally run E2E tests locally** to verify browser functionality:
+   ```bash
+   npm run test:e2e
+   ```
+   Note: E2E tests may fail in certain environments (e.g., restricted proxies). If E2E tests fail locally but unit tests pass, push your changes and verify E2E tests pass in CI.
 
-3. **The task is NOT complete if local tests fail**
+3. **Do NOT push if unit tests are failing locally** - Fix the issues first
+
+4. **The task is NOT complete if local unit tests fail**
 
 ### IMPORTANT: Monitor CI Checks After Pushing
 
@@ -116,6 +136,19 @@ wrangler whoami
 - Use ESM modules
 - Follow existing patterns in the codebase
 
+## New Feature Requirements
+
+**IMPORTANT: All new features must include E2E tests.**
+
+When adding a new feature:
+1. Implement the feature in both backend and frontend code
+2. Add comprehensive E2E tests in the appropriate `e2e/*.e2e.js` file (or create a new one for major features)
+3. Use the shared `e2e/setup.js` infrastructure for test setup/teardown
+4. Tests should include screenshots showing the feature in action
+5. Tests should verify both UI behavior and data persistence where applicable
+
+This ensures that new features are properly tested and documented through executable examples.
+
 ## Key Files
 
 - `src/index.js` - Main Worker entry point with API routes
@@ -123,6 +156,11 @@ wrangler whoami
 - `public/css/style.css` - Styling
 - `wrangler.toml` - Cloudflare Workers configuration
 - `e2e/` - E2E tests and helpers
+  - `setup.js` - Shared test infrastructure (setup/teardown functions)
   - `mock-rss-server.js` - Mock RSS feed server for testing
   - `test-helper.js` - Helper functions for E2E tests
-  - `rss-app.e2e.js` - Playwright test file
+  - `basic.e2e.js` - Basic functionality tests
+  - `feeds.e2e.js` - Feed management tests
+  - `cron.e2e.js` - Cron job tests
+  - `read-tracking.e2e.js` - Read tracking feature tests
+  - `responsive.e2e.js` - Responsive design tests

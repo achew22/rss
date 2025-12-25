@@ -115,8 +115,8 @@ export function getWorkerUrl() {
   if (!worker) {
     throw new Error('Worker not started. Call startWorker() first.');
   }
-  // The worker.address provides the actual address
-  return `http://${worker.address}`;
+  // Return the worker URL (hardcoded to match the port we start it on)
+  return `http://localhost:8787`;
 }
 
 /**

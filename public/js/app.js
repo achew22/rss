@@ -12,10 +12,12 @@ const state = {
     feeds: [],
     articles: [],
     starredArticles: new Set(),
+    readArticles: new Set(),
     currentFeed: 'all',
     currentRoute: '/',
     loading: false,
-    error: null
+    error: null,
+    hideReadArticles: true // Default: hide read articles
 };
 
 // DOM Elements
@@ -98,9 +100,12 @@ async function fetchArticles(feedId = null, starredOnly = false) {
         const data = await apiRequest(endpoint);
         state.articles = data.articles || [];
 
-        // Update starred articles set from API response
+        // Update starred and read articles sets from API response
         state.starredArticles = new Set(
             state.articles.filter(a => a.starred).map(a => a.id)
+        );
+        state.readArticles = new Set(
+            state.articles.filter(a => a.read).map(a => a.id)
         );
 
         return state.articles;
@@ -146,6 +151,13 @@ async function refreshAllFeedsApi() {
     return data;
 }
 
+async function toggleReadApi(articleId) {
+    const data = await apiRequest(`/api/articles/${articleId}/read`, {
+        method: 'POST'
+    });
+    return data;
+}
+
 // ============================================================================
 // Navigation
 // ============================================================================
@@ -183,12 +195,18 @@ function renderHome() {
                 <h2>${feedName}</h2>
                 <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}</p>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-                Refresh
-            </button>
+            <div class="articles-header-actions">
+                <label class="filter-toggle">
+                    <input type="checkbox" id="hideReadToggle" ${state.hideReadArticles ? 'checked' : ''} onchange="toggleHideRead()">
+                    <span>Hide read articles</span>
+                </label>
+                <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
         </div>
         ${state.loading ? renderLoading() : ''}
         ${state.error ? renderError(state.error) : ''}
@@ -205,6 +223,13 @@ function renderHome() {
         });
     });
 
+    elements.content.querySelectorAll('.article-action-read').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleRead(btn.dataset.id);
+        });
+    });
+
     // Add click handler for article cards to open the link
     elements.content.querySelectorAll('.article-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -214,17 +239,28 @@ function renderHome() {
             }
         });
     });
+
+    // Setup intersection observer for scroll-based read marking
+    setupScrollObserver();
 }
 
 function renderArticleCard(article) {
     const isStarred = state.starredArticles.has(article.id);
+    const isRead = state.readArticles.has(article.id);
     const timeAgo = formatTimeAgo(new Date(article.date));
 
     return `
-        <article class="article-card" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
+        <article class="article-card ${isRead ? 'read' : 'unread'}" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
             <div class="article-card-header">
                 <h3 class="article-title">${escapeHtml(article.title)}</h3>
                 <div class="article-actions">
+                    <button class="article-action article-action-read ${isRead ? 'read' : ''}" data-id="${article.id}" title="${isRead ? 'Mark as unread' : 'Mark as read'}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            ${isRead
+                                ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>'
+                                : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'}
+                        </svg>
+                    </button>
                     <button class="article-action article-action-star ${isStarred ? 'starred' : ''}" data-id="${article.id}" title="${isStarred ? 'Unstar' : 'Star'}">
                         <svg viewBox="0 0 24 24" fill="${isStarred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="18" height="18">
                             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
@@ -383,13 +419,21 @@ function renderNotFound() {
 // ============================================================================
 
 function getFilteredArticles() {
-    if (state.currentFeed === 'all') {
-        return state.articles;
-    } else if (state.currentFeed === 'starred') {
-        return state.articles.filter(a => state.starredArticles.has(a.id));
-    } else {
-        return state.articles.filter(a => a.feedId === state.currentFeed);
+    let filtered = state.articles;
+
+    // Filter by feed
+    if (state.currentFeed === 'starred') {
+        filtered = filtered.filter(a => state.starredArticles.has(a.id));
+    } else if (state.currentFeed !== 'all') {
+        filtered = filtered.filter(a => a.feedId === state.currentFeed);
     }
+
+    // Filter by read status if enabled
+    if (state.hideReadArticles) {
+        filtered = filtered.filter(a => !state.readArticles.has(a.id));
+    }
+
+    return filtered;
 }
 
 function getFeedName(feedId) {
@@ -415,6 +459,92 @@ async function toggleStar(articleId) {
         console.error('Failed to toggle star:', error);
         showNotification('Failed to update star status', 'error');
     }
+}
+
+async function toggleRead(articleId) {
+    try {
+        const result = await toggleReadApi(articleId);
+
+        if (result.read) {
+            state.readArticles.add(articleId);
+        } else {
+            state.readArticles.delete(articleId);
+        }
+
+        renderHome();
+    } catch (error) {
+        console.error('Failed to toggle read:', error);
+        showNotification('Failed to update read status', 'error');
+    }
+}
+
+function toggleHideRead() {
+    state.hideReadArticles = !state.hideReadArticles;
+    renderHome();
+}
+
+// Intersection Observer for scroll-based read marking
+let scrollObserver = null;
+
+function setupScrollObserver() {
+    // Disconnect existing observer
+    if (scrollObserver) {
+        scrollObserver.disconnect();
+    }
+
+    // Create new observer
+    scrollObserver = new IntersectionObserver(
+        (entries) => {
+            entries.forEach(async (entry) => {
+                // Mark as read when article is at least 50% visible for 1 second
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                    const articleId = entry.target.dataset.id;
+                    const isAlreadyRead = state.readArticles.has(articleId);
+
+                    if (!isAlreadyRead) {
+                        // Add a small delay to ensure user is actually reading
+                        entry.target.dataset.readTimeout = setTimeout(async () => {
+                            try {
+                                const result = await toggleReadApi(articleId);
+                                if (result.read) {
+                                    state.readArticles.add(articleId);
+                                    // Update the article card visually without full re-render
+                                    entry.target.classList.add('read');
+                                    entry.target.classList.remove('unread');
+
+                                    // Update read button
+                                    const readBtn = entry.target.querySelector('.article-action-read');
+                                    if (readBtn) {
+                                        readBtn.classList.add('read');
+                                        readBtn.title = 'Mark as unread';
+                                        readBtn.querySelector('svg').innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>';
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Failed to auto-mark as read:', error);
+                            }
+                        }, 1000);
+                    }
+                } else {
+                    // Clear timeout if article scrolls out of view
+                    const timeout = entry.target.dataset.readTimeout;
+                    if (timeout) {
+                        clearTimeout(timeout);
+                        delete entry.target.dataset.readTimeout;
+                    }
+                }
+            });
+        },
+        {
+            threshold: [0, 0.5, 1.0], // Trigger at 0%, 50%, and 100% visibility
+            rootMargin: '0px'
+        }
+    );
+
+    // Observe all unread article cards
+    elements.content.querySelectorAll('.article-card.unread').forEach(card => {
+        scrollObserver.observe(card);
+    });
 }
 
 function updateCounts() {
@@ -705,6 +835,7 @@ window.navigate = navigate;
 window.removeFeed = removeFeed;
 window.refreshFeed = refreshFeed;
 window.refreshAllFeeds = refreshAllFeeds;
+window.toggleHideRead = toggleHideRead;
 
 // ============================================================================
 // Event Listeners
