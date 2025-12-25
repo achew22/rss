@@ -190,20 +190,6 @@ export async function deleteFeed(feedId) {
 }
 
 /**
- * Clear all data (feeds, articles, starred, read status)
- * Useful for test isolation
- */
-export async function clearAllData() {
-  // Get all feeds
-  const { feeds } = await getFeeds();
-
-  // Delete each feed
-  for (const feed of feeds) {
-    await deleteFeed(feed.id);
-  }
-}
-
-/**
  * Toggle star status on an article
  */
 export async function toggleStar(articleId) {
