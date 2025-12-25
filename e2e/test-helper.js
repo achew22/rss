@@ -32,8 +32,6 @@ export async function startWorker(options = {}) {
     local: true,
     persist,
     port,
-    // Enable test mode for scheduleed handler access
-    testScheduled: true,
   });
 
   return worker;
@@ -86,15 +84,16 @@ export function getWorker() {
 /**
  * Trigger the cron job on the worker
  * This simulates what happens when the scheduled trigger runs
+ * Uses the /api/refresh endpoint which performs the same feed refresh
  */
 export async function triggerCron() {
   if (!worker) {
     throw new Error('Worker not started. Call startWorker() first.');
   }
 
-  // wrangler's unstable_dev provides a scheduled method for triggering crons
-  const result = await worker.scheduled();
-  return result;
+  // Use the API endpoint to refresh feeds (same as cron does)
+  const response = await workerFetch('/api/refresh', { method: 'POST' });
+  return response.json();
 }
 
 /**
