@@ -337,6 +337,8 @@ input {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 1.5rem;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .articles-header h2 {
@@ -347,6 +349,33 @@ input {
 .articles-meta {
     color: var(--color-text-secondary);
     font-size: 0.875rem;
+}
+
+.articles-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--color-text);
+    cursor: pointer;
+    user-select: none;
+}
+
+.filter-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--color-primary);
+}
+
+.filter-toggle:hover {
+    color: var(--color-primary);
 }
 
 .articles-grid {
@@ -366,6 +395,15 @@ input {
 .article-card:hover {
     box-shadow: var(--shadow-md);
     border-color: var(--color-primary);
+}
+
+.article-card.read {
+    opacity: 0.6;
+    background-color: var(--color-border-light);
+}
+
+.article-card.read:hover {
+    opacity: 0.8;
 }
 
 .article-card-header {
@@ -412,6 +450,10 @@ input {
 
 .article-action.starred {
     color: var(--color-warning);
+}
+
+.article-action-read.read {
+    color: var(--color-primary);
 }
 
 .article-excerpt {
@@ -743,6 +785,17 @@ input {
         padding: 1rem;
     }
 
+    /* Stack articles header on mobile */
+    .articles-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .articles-header-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     /* Make logo text smaller on very small screens */
     @media (max-width: 480px) {
         .logo {
@@ -752,6 +805,10 @@ input {
         .logo-icon {
             width: 24px;
             height: 24px;
+        }
+
+        .filter-toggle {
+            font-size: 0.8125rem;
         }
     }
 }

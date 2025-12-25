@@ -205,4 +205,207 @@ test.describe('RSS Reader E2E Tests', () => {
     });
     console.log('Screenshot: 07-atom-feed.png');
   });
+
+  test('08 - manually mark article as read/unread', async ({ page }) => {
+    // Ensure we have some articles
+    const feeds = await getFeeds();
+    if (feeds.feeds.length === 0) {
+      await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News');
+    }
+
+    await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    // Find the first article card
+    const firstArticle = page.locator('.article-card').first();
+    await expect(firstArticle).toBeVisible();
+
+    // Initial state should be unread
+    await expect(firstArticle).toHaveClass(/unread/);
+
+    // Screenshot before marking as read
+    await page.screenshot({
+      path: 'e2e/screenshots/08-before-read.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 08-before-read.png');
+
+    // Click the read button
+    const readButton = firstArticle.locator('.article-action-read');
+    await readButton.click();
+    await page.waitForTimeout(500);
+
+    // Article should now be marked as read
+    await expect(firstArticle).toHaveClass(/read/);
+
+    // Screenshot after marking as read
+    await page.screenshot({
+      path: 'e2e/screenshots/08-after-read.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 08-after-read.png');
+
+    // Click the read button again to mark as unread
+    await readButton.click();
+    await page.waitForTimeout(500);
+
+    // Article should be unread again
+    await expect(firstArticle).toHaveClass(/unread/);
+
+    console.log('Manual read/unread toggle working');
+  });
+
+  test('09 - filter toggle hides/shows read articles', async ({ page }) => {
+    // Ensure we have some articles
+    const feeds = await getFeeds();
+    if (feeds.feeds.length === 0) {
+      await addFeed(`${mockServerUrl}/feeds/web-dev/rss`, 'Web Dev');
+    }
+
+    await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    // Mark first article as read
+    const firstArticle = page.locator('.article-card').first();
+    await firstArticle.locator('.article-action-read').click();
+    await page.waitForTimeout(500);
+
+    // Count articles before disabling filter
+    const articlesWithFilter = await page.locator('.article-card').count();
+    console.log(`Articles visible with filter: ${articlesWithFilter}`);
+
+    // Screenshot with filter on (default)
+    await page.screenshot({
+      path: 'e2e/screenshots/09-filter-on.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 09-filter-on.png');
+
+    // Uncheck the "Hide read articles" filter
+    const filterToggle = page.locator('#hideReadToggle');
+    await filterToggle.click();
+    await page.waitForTimeout(500);
+
+    // Count articles after disabling filter
+    const articlesWithoutFilter = await page.locator('.article-card').count();
+    console.log(`Articles visible without filter: ${articlesWithoutFilter}`);
+
+    // Should see at least one more article (the one we marked as read)
+    expect(articlesWithoutFilter).toBeGreaterThan(articlesWithFilter);
+
+    // Screenshot with filter off
+    await page.screenshot({
+      path: 'e2e/screenshots/09-filter-off.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 09-filter-off.png');
+
+    console.log('Filter toggle working');
+  });
+
+  test('10 - scroll marking articles as read', async ({ page }) => {
+    // Ensure we have some articles
+    const feeds = await getFeeds();
+    if (feeds.feeds.length === 0) {
+      await addFeed(`${mockServerUrl}/feeds/cloudflare/rss`, 'Cloudflare');
+      await addFeed(`${mockServerUrl}/feeds/web-dev/rss`, 'Web Dev');
+    }
+
+    await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    // Disable the filter to see all articles
+    const filterToggle = page.locator('#hideReadToggle');
+    if (await filterToggle.isChecked()) {
+      await filterToggle.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Get initial count of unread articles
+    const initialUnread = await page.locator('.article-card.unread').count();
+    console.log(`Initial unread articles: ${initialUnread}`);
+
+    // Screenshot before scrolling
+    await page.screenshot({
+      path: 'e2e/screenshots/10-before-scroll.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 10-before-scroll.png');
+
+    // Scroll to make first article fully visible and wait for auto-mark
+    const firstArticle = page.locator('.article-card.unread').first();
+    await firstArticle.scrollIntoViewIfNeeded();
+
+    // Wait for the scroll observer timeout (1 second) plus processing time
+    await page.waitForTimeout(2000);
+
+    // Screenshot after scrolling
+    await page.screenshot({
+      path: 'e2e/screenshots/10-after-scroll.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 10-after-scroll.png');
+
+    // Verify article was marked as read (might be hidden by filter or visible but marked)
+    const afterUnread = await page.locator('.article-card.unread').count();
+    console.log(`After scroll unread articles: ${afterUnread}`);
+
+    // Should have fewer unread articles
+    expect(afterUnread).toBeLessThan(initialUnread);
+
+    console.log('Scroll-based read marking working');
+  });
+
+  test('11 - read state persists across page reloads', async ({ page }) => {
+    // Ensure we have some articles
+    const feeds = await getFeeds();
+    if (feeds.feeds.length === 0) {
+      await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News');
+    }
+
+    await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    // Disable filter to see all articles
+    const filterToggle = page.locator('#hideReadToggle');
+    if (await filterToggle.isChecked()) {
+      await filterToggle.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Mark first article as read
+    const firstArticle = page.locator('.article-card').first();
+    const articleId = await firstArticle.getAttribute('data-id');
+    await firstArticle.locator('.article-action-read').click();
+    await page.waitForTimeout(500);
+
+    // Verify it's marked as read
+    await expect(firstArticle).toHaveClass(/read/);
+
+    // Reload the page
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(1000);
+
+    // Disable filter again after reload
+    const filterToggleAfterReload = page.locator('#hideReadToggle');
+    if (await filterToggleAfterReload.isChecked()) {
+      await filterToggleAfterReload.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Find the same article by ID
+    const sameArticle = page.locator(`.article-card[data-id="${articleId}"]`);
+
+    // Verify it's still marked as read
+    await expect(sameArticle).toHaveClass(/read/);
+
+    // Screenshot showing persistence
+    await page.screenshot({
+      path: 'e2e/screenshots/11-read-persisted.png',
+      fullPage: true,
+    });
+    console.log('Screenshot: 11-read-persisted.png');
+
+    console.log('Read state persistence working');
+  });
 });

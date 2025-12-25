@@ -116,6 +116,18 @@ wrangler whoami
 - Use ESM modules
 - Follow existing patterns in the codebase
 
+## New Feature Requirements
+
+**IMPORTANT: All new features must include E2E tests.**
+
+When adding a new feature:
+1. Implement the feature in both backend and frontend code
+2. Add comprehensive E2E tests in `e2e/rss-app.e2e.js` that demonstrate the feature working
+3. Tests should include screenshots showing the feature in action
+4. Tests should verify both UI behavior and data persistence where applicable
+
+This ensures that new features are properly tested and documented through executable examples.
+
 ## Key Files
 
 - `src/index.js` - Main Worker entry point with API routes

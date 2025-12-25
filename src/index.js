@@ -10,6 +10,7 @@
 const FEEDS_KEY = "feeds";
 const ARTICLES_KEY = "articles";
 const STARRED_KEY = "starred";
+const READ_KEY = "read";
 
 export default {
   async fetch(request, env, ctx) {
@@ -98,6 +99,12 @@ async function handleApiRequest(request, url, env, ctx) {
       return await handleToggleStar(starMatch[1], env, corsHeaders);
     }
 
+    // Mark article as read/unread
+    const readMatch = path.match(/^\/api\/articles\/([^/]+)\/read$/);
+    if (readMatch && method === "POST") {
+      return await handleToggleRead(readMatch[1], env, corsHeaders);
+    }
+
     // Refresh all feeds
     if (path === "/api/refresh" && method === "POST") {
       return await handleRefreshAll(env, corsHeaders);
@@ -116,6 +123,7 @@ async function handleApiRequest(request, url, env, ctx) {
           "POST /api/feeds/:id/refresh",
           "GET /api/articles",
           "POST /api/articles/:id/star",
+          "POST /api/articles/:id/read",
           "POST /api/refresh",
         ],
       },
@@ -382,6 +390,8 @@ async function handleGetArticles(url, env, corsHeaders) {
   const articles = await getArticles(env);
   const starred = await getStarred(env);
   const starredSet = new Set(starred);
+  const read = await getRead(env);
+  const readSet = new Set(read);
 
   // Apply filters from query params
   const feedId = url.searchParams.get("feedId");
@@ -397,18 +407,19 @@ async function handleGetArticles(url, env, corsHeaders) {
     filteredArticles = filteredArticles.filter((a) => starredSet.has(a.id));
   }
 
-  // Add starred status to each article
-  const articlesWithStarred = filteredArticles.map((a) => ({
+  // Add starred and read status to each article
+  const articlesWithMetadata = filteredArticles.map((a) => ({
     ...a,
     starred: starredSet.has(a.id),
+    read: readSet.has(a.id),
   }));
 
   // Sort by date, newest first
-  articlesWithStarred.sort(
+  articlesWithMetadata.sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
-  return jsonResponse({ articles: articlesWithStarred }, corsHeaders);
+  return jsonResponse({ articles: articlesWithMetadata }, corsHeaders);
 }
 
 /**
@@ -430,6 +441,27 @@ async function handleToggleStar(articleId, env, corsHeaders) {
   await saveStarred(env, Array.from(starredSet));
 
   return jsonResponse({ articleId, starred: isStarred }, corsHeaders);
+}
+
+/**
+ * Toggle read status for an article
+ */
+async function handleToggleRead(articleId, env, corsHeaders) {
+  const read = await getRead(env);
+  const readSet = new Set(read);
+
+  let isRead;
+  if (readSet.has(articleId)) {
+    readSet.delete(articleId);
+    isRead = false;
+  } else {
+    readSet.add(articleId);
+    isRead = true;
+  }
+
+  await saveRead(env, Array.from(readSet));
+
+  return jsonResponse({ articleId, read: isRead }, corsHeaders);
 }
 
 // ============================================================================
@@ -660,6 +692,22 @@ async function saveStarred(env, starred) {
     return;
   }
   await env.RSS_STORE.put(STARRED_KEY, JSON.stringify(starred));
+}
+
+async function getRead(env) {
+  if (!env.RSS_STORE) {
+    return [];
+  }
+  const data = await env.RSS_STORE.get(READ_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveRead(env, read) {
+  if (!env.RSS_STORE) {
+    // KV not configured - data won't persist but operation succeeds
+    return;
+  }
+  await env.RSS_STORE.put(READ_KEY, JSON.stringify(read));
 }
 
 // ============================================================================
