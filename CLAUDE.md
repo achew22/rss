@@ -45,7 +45,15 @@ Located in `src/*.test.js`, run with Vitest using the Cloudflare Workers pool.
 Located in `src/integration.test.js`, run against the deployed worker.
 
 ### E2E Tests
-Located in `e2e/*.e2e.js`, run with Playwright. These tests:
+Located in `e2e/*.e2e.js`, run with Playwright. Tests are organized into logical modules:
+- `basic.e2e.js` - Homepage and API health checks
+- `feeds.e2e.js` - Feed management (add feed, feeds page, Atom support)
+- `cron.e2e.js` - Cron job functionality
+- `read-tracking.e2e.js` - Read tracking features (manual, filter, scroll, persistence)
+- `responsive.e2e.js` - Mobile layout and responsive design
+- `setup.js` - Shared test infrastructure (setup/teardown functions)
+
+These tests:
 1. Spin up the RSS Worker using Miniflare (via wrangler's unstable_dev)
 2. Spin up a mock RSS feed server with sample feeds
 3. Test the full application flow in a real browser
@@ -134,9 +142,10 @@ wrangler whoami
 
 When adding a new feature:
 1. Implement the feature in both backend and frontend code
-2. Add comprehensive E2E tests in `e2e/rss-app.e2e.js` that demonstrate the feature working
-3. Tests should include screenshots showing the feature in action
-4. Tests should verify both UI behavior and data persistence where applicable
+2. Add comprehensive E2E tests in the appropriate `e2e/*.e2e.js` file (or create a new one for major features)
+3. Use the shared `e2e/setup.js` infrastructure for test setup/teardown
+4. Tests should include screenshots showing the feature in action
+5. Tests should verify both UI behavior and data persistence where applicable
 
 This ensures that new features are properly tested and documented through executable examples.
 
@@ -147,6 +156,11 @@ This ensures that new features are properly tested and documented through execut
 - `public/css/style.css` - Styling
 - `wrangler.toml` - Cloudflare Workers configuration
 - `e2e/` - E2E tests and helpers
+  - `setup.js` - Shared test infrastructure (setup/teardown functions)
   - `mock-rss-server.js` - Mock RSS feed server for testing
   - `test-helper.js` - Helper functions for E2E tests
-  - `rss-app.e2e.js` - Playwright test file
+  - `basic.e2e.js` - Basic functionality tests
+  - `feeds.e2e.js` - Feed management tests
+  - `cron.e2e.js` - Cron job tests
+  - `read-tracking.e2e.js` - Read tracking feature tests
+  - `responsive.e2e.js` - Responsive design tests
