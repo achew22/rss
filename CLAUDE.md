@@ -53,6 +53,12 @@ Located in `e2e/*.e2e.js`, run with Playwright. These tests:
 
 E2E test artifacts (screenshots, reports) are uploaded as GitHub Actions artifacts.
 
+**E2E Screenshots Workflow:**
+- Screenshots are automatically generated when E2E tests run
+- **CI generates canonical screenshots**: After successful E2E tests, GitHub Actions commits updated screenshots
+- **Local development**: You can run `npm run test:e2e` locally to verify tests pass, but screenshots may differ slightly due to environment differences
+- **Best practice**: Let CI generate and commit screenshots for consistency. If you need to update screenshots, ensure E2E tests pass in CI.
+
 ## Pull Request Workflow
 
 ### IMPORTANT: Run Tests Locally Before Pushing
@@ -64,9 +70,15 @@ Before pushing any changes:
    npm test
    ```
 
-2. **Do NOT push if tests are failing locally** - Fix the issues first
+2. **Optionally run E2E tests locally** to verify browser functionality:
+   ```bash
+   npm run test:e2e
+   ```
+   Note: E2E tests may fail in certain environments (e.g., restricted proxies). If E2E tests fail locally but unit tests pass, push your changes and verify E2E tests pass in CI.
 
-3. **The task is NOT complete if local tests fail**
+3. **Do NOT push if unit tests are failing locally** - Fix the issues first
+
+4. **The task is NOT complete if local unit tests fail**
 
 ### IMPORTANT: Monitor CI Checks After Pushing
 
