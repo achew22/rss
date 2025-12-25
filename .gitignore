@@ -16,3 +16,7 @@ node_modules/
 .vscode/
 *.swp
 *.swo
+
+# Playwright
+playwright-report/
+e2e/test-results/
