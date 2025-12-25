@@ -19,6 +19,7 @@ import {
   addFeed,
   getFeeds,
   getArticles,
+  clearAllData,
 } from './test-helper.js';
 
 // Store the worker URL for browser navigation
@@ -53,10 +54,14 @@ test.describe('RSS Reader E2E Tests', () => {
   });
 
   test.beforeEach(async () => {
+    // Reset mock server
     const mockServer = getMockServer();
     if (mockServer) {
       mockServer.reset();
     }
+
+    // Clear all data from KV storage for test isolation
+    await clearAllData();
   });
 
   test('01 - homepage loads correctly', async ({ page }) => {
