@@ -59,9 +59,6 @@ test.describe('RSS Reader E2E Tests', () => {
     if (mockServer) {
       mockServer.reset();
     }
-
-    // Clear all data from KV storage for test isolation
-    await clearAllData();
   });
 
   test('01 - homepage loads correctly', async ({ page }) => {
