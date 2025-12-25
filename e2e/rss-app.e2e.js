@@ -27,42 +27,36 @@ let mockServerUrl;
 
 test.describe('RSS Reader E2E Tests', () => {
   test.beforeAll(async () => {
-    console.log('Starting mock RSS server...');
+    console.log('Starting test setup...');
 
-    // Start the mock RSS server (shared across all tests)
+    // Start the mock RSS server first
     const mockServer = await startMockServer(3001);
     mockServerUrl = mockServer.getUrl();
     console.log(`Mock RSS server started at ${mockServerUrl}`);
 
-    // Set worker URL (will be used by each test)
+    // Start the worker
+    console.log('Starting RSS Worker...');
+    const worker = await startWorker({ port: 8787 });
     workerUrl = `http://localhost:8787`;
+    console.log(`RSS Worker started at ${workerUrl}`);
+
+    // Give servers time to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('Test setup complete');
   });
 
   test.afterAll(async () => {
-    console.log('Stopping mock RSS server...');
+    console.log('Cleaning up...');
+    await stopWorker();
     await stopMockServer();
-    console.log('Mock server stopped');
+    console.log('Servers stopped');
   });
 
   test.beforeEach(async () => {
-    // Reset mock server for clean state
     const mockServer = getMockServer();
     if (mockServer) {
       mockServer.reset();
     }
-
-    // Start a fresh worker for this test (clean KV storage)
-    console.log('Starting fresh RSS Worker for test...');
-    await startWorker({ port: 8787, persist: false });
-    console.log('RSS Worker started');
-
-    // Give worker time to initialize
-    await new Promise(resolve => setTimeout(resolve, 500));
-  });
-
-  test.afterEach(async () => {
-    // Stop the worker to clean up resources
-    await stopWorker();
   });
 
   test('01 - homepage loads correctly', async ({ page }) => {
