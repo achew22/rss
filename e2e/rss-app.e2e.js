@@ -223,11 +223,22 @@ test.describe('RSS Reader E2E Tests', () => {
       await page.waitForTimeout(500);
     }
 
-    // Find the first article card
+    // Find the first article card (may already be read from previous tests)
     const firstArticle = page.locator('.article-card').first();
     await expect(firstArticle).toBeVisible();
 
-    // Initial state should be unread
+    // Get current read state
+    const initialClasses = await firstArticle.getAttribute('class');
+    const isInitiallyRead = initialClasses.includes('read');
+
+    // If already read, mark as unread first
+    if (isInitiallyRead) {
+      const readButton = firstArticle.locator('.article-action-read');
+      await readButton.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Now article should be unread (either initially or after toggling)
     await expect(firstArticle).toHaveClass(/unread/);
 
     // Screenshot before marking as read
@@ -237,7 +248,7 @@ test.describe('RSS Reader E2E Tests', () => {
     });
     console.log('Screenshot: 08-before-read.png');
 
-    // Click the read button
+    // Click the read button to mark as read
     const readButton = firstArticle.locator('.article-action-read');
     await readButton.click();
     await page.waitForTimeout(500);
@@ -279,10 +290,16 @@ test.describe('RSS Reader E2E Tests', () => {
       await page.waitForTimeout(500);
     }
 
-    // Mark first article as read
+    // Ensure first article is marked as read (not just toggle)
     const firstArticle = page.locator('.article-card').first();
-    await firstArticle.locator('.article-action-read').click();
-    await page.waitForTimeout(500);
+    const initialClasses = await firstArticle.getAttribute('class');
+    const isRead = initialClasses.includes('read');
+
+    if (!isRead) {
+      // Mark as read if it's currently unread
+      await firstArticle.locator('.article-action-read').click();
+      await page.waitForTimeout(500);
+    }
 
     // Re-enable the filter
     await filterToggle.click();
@@ -338,9 +355,19 @@ test.describe('RSS Reader E2E Tests', () => {
       await page.waitForTimeout(500);
     }
 
-    // Get initial count of unread articles
-    const initialUnread = await page.locator('.article-card.unread').count();
+    // Ensure we have at least one unread article for this test
+    // (previous tests may have marked all articles as read via scroll observer)
+    let initialUnread = await page.locator('.article-card.unread').count();
     console.log(`Initial unread articles: ${initialUnread}`);
+
+    if (initialUnread === 0) {
+      // Mark first article as unread to have something to test with
+      const firstArticle = page.locator('.article-card').first();
+      await firstArticle.locator('.article-action-read').click();
+      await page.waitForTimeout(500);
+      initialUnread = await page.locator('.article-card.unread').count();
+      console.log(`After toggling, unread articles: ${initialUnread}`);
+    }
 
     // Screenshot before scrolling
     await page.screenshot({
@@ -349,9 +376,9 @@ test.describe('RSS Reader E2E Tests', () => {
     });
     console.log('Screenshot: 10-before-scroll.png');
 
-    // Scroll to make first article fully visible and wait for auto-mark
-    const firstArticle = page.locator('.article-card.unread').first();
-    await firstArticle.scrollIntoViewIfNeeded();
+    // Scroll to make first unread article fully visible and wait for auto-mark
+    const firstUnreadArticle = page.locator('.article-card.unread').first();
+    await firstUnreadArticle.scrollIntoViewIfNeeded();
 
     // Wait for the scroll observer timeout (1 second) plus processing time
     await page.waitForTimeout(2000);
