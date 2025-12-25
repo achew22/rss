@@ -216,6 +216,13 @@ test.describe('RSS Reader E2E Tests', () => {
     await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(1000);
 
+    // Disable the "Hide read articles" filter to see all articles
+    const filterToggle = page.locator('#hideReadToggle');
+    if (await filterToggle.isChecked()) {
+      await filterToggle.click();
+      await page.waitForTimeout(500);
+    }
+
     // Find the first article card
     const firstArticle = page.locator('.article-card').first();
     await expect(firstArticle).toBeVisible();
@@ -265,24 +272,34 @@ test.describe('RSS Reader E2E Tests', () => {
     await page.goto(workerUrl, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(1000);
 
+    // Disable filter first to ensure we can see articles
+    const filterToggle = page.locator('#hideReadToggle');
+    if (await filterToggle.isChecked()) {
+      await filterToggle.click();
+      await page.waitForTimeout(500);
+    }
+
     // Mark first article as read
     const firstArticle = page.locator('.article-card').first();
     await firstArticle.locator('.article-action-read').click();
     await page.waitForTimeout(500);
 
-    // Count articles before disabling filter
+    // Re-enable the filter
+    await filterToggle.click();
+    await page.waitForTimeout(500);
+
+    // Count articles with filter enabled (should not show the read article)
     const articlesWithFilter = await page.locator('.article-card').count();
     console.log(`Articles visible with filter: ${articlesWithFilter}`);
 
-    // Screenshot with filter on (default)
+    // Screenshot with filter on
     await page.screenshot({
       path: 'e2e/screenshots/09-filter-on.png',
       fullPage: true,
     });
     console.log('Screenshot: 09-filter-on.png');
 
-    // Uncheck the "Hide read articles" filter
-    const filterToggle = page.locator('#hideReadToggle');
+    // Disable the filter to show read articles
     await filterToggle.click();
     await page.waitForTimeout(500);
 
