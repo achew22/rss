@@ -75,8 +75,7 @@ test.describe('Read Tracking', () => {
     console.log('Screenshot: 08-before-read.png');
 
     // Click the read button to mark as read
-    const readButton = firstArticle.locator('.article-action-read');
-    await readButton.click();
+    await firstArticle.locator('.article-action-read').click();
     await page.waitForTimeout(500);
 
     // Article should now be marked as read
@@ -89,8 +88,8 @@ test.describe('Read Tracking', () => {
     });
     console.log('Screenshot: 08-after-read.png');
 
-    // Click the read button again to mark as unread
-    await readButton.click();
+    // Click the read button again to mark as unread (re-locate after DOM update)
+    await firstArticle.locator('.article-action-read').click();
     await page.waitForTimeout(500);
 
     // Article should be unread again
