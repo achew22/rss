@@ -751,13 +751,17 @@ function selectPreviousArticle() {
     }
 }
 
-function openSelectedArticle() {
+function openSelectedArticle(background = false) {
     const cards = getVisibleArticleCards();
     if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
         const card = cards[state.selectedArticleIndex];
         const link = card.dataset.link;
         if (link) {
-            window.open(link, '_blank');
+            const newWindow = window.open(link, '_blank');
+            if (background && newWindow) {
+                // Return focus to the current window for background tab
+                window.focus();
+            }
         }
     }
 }
@@ -800,6 +804,12 @@ function handleKeyboardNavigation(event) {
             if (state.selectedArticleIndex >= 0) {
                 event.preventDefault();
                 openSelectedArticle();
+            }
+            break;
+        case 'b':
+            if (state.selectedArticleIndex >= 0) {
+                event.preventDefault();
+                openSelectedArticle(true);  // Open in background
             }
             break;
         case 's':

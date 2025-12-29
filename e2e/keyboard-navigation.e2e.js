@@ -321,6 +321,45 @@ test.describe('Keyboard Navigation Tests', () => {
     await popup.close();
   });
 
+  test('b key opens selected article in background tab', async ({ page }) => {
+    // Add a feed
+    await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
+
+    await waitForPageLoad(page, workerUrl);
+    await page.waitForTimeout(500);
+
+    // Select first article
+    await page.keyboard.press('j');
+    await page.waitForTimeout(200);
+
+    // Get the link of the selected article
+    const selectedCard = page.locator('.article-card.focused');
+    const articleLink = await selectedCard.getAttribute('data-link');
+    expect(articleLink).toBeTruthy();
+
+    // Listen for popup (new tab)
+    const popupPromise = page.waitForEvent('popup');
+
+    // Press 'b' to open article in background
+    await page.keyboard.press('b');
+
+    // Wait for popup
+    const popup = await popupPromise;
+    const popupUrl = popup.url();
+
+    // Verify the popup URL matches the article link
+    expect(popupUrl).toBe(articleLink);
+
+    // The main page should still have focus (article still focused)
+    await expect(selectedCard).toHaveClass(/focused/);
+
+    await takeScreenshot(page, 'keyboard-12b-article-opened-background');
+    console.log('✓ b key opens selected article in background tab');
+
+    // Close popup
+    await popup.close();
+  });
+
   test('s key toggles star on selected article', async ({ page }) => {
     // Add a feed
     await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
