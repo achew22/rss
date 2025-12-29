@@ -368,6 +368,13 @@ input {
     border-color: var(--color-primary);
 }
 
+.article-card.focused {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-primary);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
 .article-card-header {
     display: flex;
     align-items: flex-start;

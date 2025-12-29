@@ -35,10 +35,9 @@ test.describe('Feed Management Tests', () => {
   });
 
   test('can add RSS feed and see articles', async ({ page }) => {
-    // Add feed via API (use unique name to avoid conflicts)
+    // Add feed via API
     console.log('Adding RSS feed via API...');
-    const feedName = `Tech News ${Date.now()}`;
-    const result = await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, feedName, page);
+    const result = await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
     console.log('Feed added:', JSON.stringify(result));
     // Feed should be added successfully or already exist
     expect(result.feed || result.error).toBeDefined();
@@ -57,10 +56,9 @@ test.describe('Feed Management Tests', () => {
   });
 
   test('can add Atom feed and see articles', async ({ page }) => {
-    // Add Atom feed (use unique name to avoid conflicts)
+    // Add Atom feed
     console.log('Adding Atom feed via API...');
-    const feedName = `Tech Atom ${Date.now()}`;
-    const result = await addFeed(`${mockServerUrl}/feeds/tech-news/atom`, feedName, page);
+    const result = await addFeed(`${mockServerUrl}/feeds/tech-news/atom`, 'Tech Atom', page);
     // Feed should be added successfully or already exist
     expect(result.feed || result.error).toBeDefined();
 
