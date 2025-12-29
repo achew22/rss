@@ -757,12 +757,16 @@ function openSelectedArticle(background = false) {
         const card = cards[state.selectedArticleIndex];
         const link = card.dataset.link;
         if (link) {
-            // Open the link in a new tab
-            const newWindow = window.open(link, '_blank');
-            if (background && newWindow) {
-                // Blur the new window and refocus current window to keep it in background
-                newWindow.blur();
-                window.focus();
+            if (background) {
+                // Listen for blur event and immediately refocus
+                const refocus = () => {
+                    window.removeEventListener('blur', refocus);
+                    setTimeout(() => window.focus(), 0);
+                };
+                window.addEventListener('blur', refocus);
+                window.open(link, '_blank');
+            } else {
+                window.open(link, '_blank');
             }
         }
     }
