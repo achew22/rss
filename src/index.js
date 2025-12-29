@@ -7,10 +7,8 @@
  */
 
 // KV Keys
-const FEEDS_KEY = "feeds";
-const ARTICLES_KEY = "articles";
-const STARRED_KEY = "starred";
-const READ_KEY = "read";
+const FEEDS_KEY = "feeds"; // Global registry of all feeds
+const DEFAULT_USER_ID = "default"; // Single user for now
 
 export default {
   async fetch(request, env, ctx) {
@@ -140,18 +138,23 @@ async function handleApiRequest(request, url, env, ctx) {
 }
 
 /**
- * Get all feeds
+ * Get all feeds (user's subscribed feeds)
  */
 async function handleGetFeeds(env, corsHeaders) {
+  const userSubs = await getUserSubscriptions(env);
   const feeds = await getFeeds(env);
+
+  // Get only feeds user is subscribed to
+  const subscribedFeedIds = new Set(userSubs.feeds.map((sub) => sub.feedId));
+  const subscribedFeeds = feeds.filter((feed) => subscribedFeedIds.has(feed.id));
 
   // Fetch feed indexes in parallel to get article counts
   const feedIndexes = await Promise.all(
-    feeds.map((feed) => getFeed(env, feed.id))
+    subscribedFeeds.map((feed) => getFeed(env, feed.id))
   );
 
   // Calculate article counts per feed
-  const feedsWithCounts = feeds.map((feed, index) => ({
+  const feedsWithCounts = subscribedFeeds.map((feed, index) => ({
     ...feed,
     count: feedIndexes[index]?.articles?.length || 0,
   }));
@@ -205,9 +208,18 @@ async function handleAddFeed(request, env, corsHeaders) {
     lastFetched: new Date().toISOString(),
   };
 
-  // Save feed metadata
+  // Save feed to global registry
   feeds.push(newFeed);
   await saveFeeds(env, feeds);
+
+  // Add to user's subscriptions with watermark at 0 (all articles unread)
+  const userSubs = await getUserSubscriptions(env);
+  userSubs.feeds.push({
+    feedId: newFeedId,
+    caughtUpToTimestamp: 0,
+    manuallyReadBefore: [],
+  });
+  await saveUserSubscriptions(env, userSubs);
 
   // Create articles from the feed
   const newArticles = parsedFeed.items.map((item) => ({
@@ -278,22 +290,22 @@ async function handleDeleteFeed(feedId, env, corsHeaders) {
     await env.RSS_STORE.delete(`feed:${feedId}`);
   }
 
-  // Remove feed metadata
+  // Remove feed from global registry
   feeds.splice(feedIndex, 1);
   await saveFeeds(env, feeds);
 
+  // Remove from user's subscriptions
+  const userSubs = await getUserSubscriptions(env);
+  userSubs.feeds = userSubs.feeds.filter((sub) => sub.feedId !== feedId);
+  await saveUserSubscriptions(env, userSubs);
+
   // Remove starred status for deleted articles
   const articleIdsSet = new Set(articleIds);
-  const starred = await getStarred(env);
+  const starred = await getUserStarred(env);
   const remainingStarred = starred.articles.filter(
     (id) => !articleIdsSet.has(id)
   );
-  await saveStarred(env, { articles: remainingStarred });
-
-  // Remove read status for deleted articles
-  const read = await getRead(env);
-  const remainingRead = read.articles.filter((id) => !articleIdsSet.has(id));
-  await saveRead(env, { articles: remainingRead });
+  await saveUserStarred(env, { articles: remainingStarred });
 
   return jsonResponse({ success: true }, corsHeaders);
 }
@@ -462,11 +474,15 @@ async function handleRefreshAll(env, corsHeaders) {
  * Get all articles
  */
 async function handleGetArticles(url, env, corsHeaders) {
-  const feeds = await getFeeds(env);
-  const starred = await getStarred(env);
+  const userSubs = await getUserSubscriptions(env);
+  const starred = await getUserStarred(env);
   const starredSet = new Set(starred.articles);
-  const read = await getRead(env);
-  const readSet = new Set(read.articles);
+
+  // Build subscription lookup map
+  const subsMap = new Map();
+  for (const sub of userSubs.feeds) {
+    subsMap.set(sub.feedId, sub);
+  }
 
   // Apply filters from query params
   const feedId = url.searchParams.get("feedId");
@@ -477,16 +493,20 @@ async function handleGetArticles(url, env, corsHeaders) {
 
   if (starredOnly) {
     // For starred view, need to find which feeds these articles belong to
-    // Build article refs by checking all feeds
+    // Build article refs by checking subscribed feeds
     const allFeedIndexes = await Promise.all(
-      feeds.map((feed) => getFeed(env, feed.id))
+      userSubs.feeds.map((sub) => getFeed(env, sub.feedId))
     );
     articleRefs = [];
     for (const feedIndex of allFeedIndexes) {
       if (!feedIndex) continue;
       for (const article of feedIndex.articles) {
         if (starred.articles.includes(article.id)) {
-          articleRefs.push({ feedId: feedIndex.id, articleId: article.id });
+          articleRefs.push({
+            feedId: feedIndex.id,
+            articleId: article.id,
+            timestamp: article.timestamp,
+          });
         }
       }
     }
@@ -500,36 +520,55 @@ async function handleGetArticles(url, env, corsHeaders) {
     articleRefs = feedIndex.articles.map((a) => ({
       feedId: feedId,
       articleId: a.id,
+      timestamp: a.timestamp,
     }));
   } else {
-    // All feeds view - use merge sort
+    // All feeds view - use merge sort across subscribed feeds
     feedIndexes = await Promise.all(
-      feeds.map((feed) => getFeed(env, feed.id))
+      userSubs.feeds.map((sub) => getFeed(env, sub.feedId))
     );
     // Filter out any null feeds
     feedIndexes = feedIndexes.filter((f) => f !== null);
 
-    // Merge sort to get article IDs (newest first by default)
+    // Merge sort to get article refs (newest first by default)
     // Limit to 1000 articles for performance
     const sortedArticles = mergeSortArticles(feedIndexes, true, 1000);
 
-    // Convert to article refs with feedId
+    // sortedArticles already has feedId, articleId, and we need timestamp
     articleRefs = sortedArticles.map((item) => ({
       feedId: item.feedId,
       articleId: item.articleId,
+      timestamp: item.timestamp,
     }));
   }
 
   // Fetch the actual article data
   const articles = await getArticles(env, articleRefs);
 
+  // Get manual read list
+  let readData = null;
+  if (env.RSS_STORE) {
+    const data = await env.RSS_STORE.get(`user:default:read`);
+    readData = data ? JSON.parse(data) : { articles: [] };
+  } else {
+    readData = { articles: [] };
+  }
+  const manualReadSet = new Set(readData.articles);
+
   // Add starred and read status to each article
-  const articlesWithStatus = articles.map((a) => ({
-    ...a,
-    date: new Date(a.timestamp).toISOString(), // Convert timestamp to ISO for frontend
-    starred: starredSet.has(a.id),
-    read: readSet.has(a.id),
-  }));
+  const articlesWithStatus = articles.map((a) => {
+    const subscription = subsMap.get(a.feedId);
+    // Article is read if: manually marked OR (watermark says it's read AND not in exceptions)
+    const watermarkRead = isArticleRead(subscription, a.id, a.timestamp);
+    const read = manualReadSet.has(a.id) || watermarkRead;
+
+    return {
+      ...a,
+      date: new Date(a.timestamp).toISOString(), // Convert timestamp to ISO for frontend
+      starred: starredSet.has(a.id),
+      read: read,
+    };
+  });
 
   return jsonResponse({ articles: articlesWithStatus }, corsHeaders);
 }
@@ -538,7 +577,7 @@ async function handleGetArticles(url, env, corsHeaders) {
  * Toggle star status for an article
  */
 async function handleToggleStar(articleId, env, corsHeaders) {
-  const starred = await getStarred(env);
+  const starred = await getUserStarred(env);
   const starredSet = new Set(starred.articles);
 
   let isStarred;
@@ -550,19 +589,33 @@ async function handleToggleStar(articleId, env, corsHeaders) {
     isStarred = true;
   }
 
-  await saveStarred(env, { articles: Array.from(starredSet) });
+  await saveUserStarred(env, { articles: Array.from(starredSet) });
 
   return jsonResponse({ articleId, starred: isStarred }, corsHeaders);
 }
 
 /**
  * Toggle read status for an article
+ * For simplicity with watermark tracking, just toggle a simple read list
+ * (Watermark will be used for bulk "mark all as read" operations)
  */
 async function handleToggleRead(articleId, env, corsHeaders) {
-  const read = await getRead(env);
-  const readSet = new Set(read.articles);
+  // For now, use a simple per-user read list similar to starred
+  // TODO: Implement full watermark-based tracking
+  const userSubs = await getUserSubscriptions(env);
 
+  // Create a simple read tracking object if it doesn't exist
+  let readData = null;
+  if (env.RSS_STORE) {
+    const data = await env.RSS_STORE.get(`user:default:read`);
+    readData = data ? JSON.parse(data) : { articles: [] };
+  } else {
+    readData = { articles: [] };
+  }
+
+  const readSet = new Set(readData.articles);
   let isRead;
+
   if (readSet.has(articleId)) {
     readSet.delete(articleId);
     isRead = false;
@@ -571,7 +624,9 @@ async function handleToggleRead(articleId, env, corsHeaders) {
     isRead = true;
   }
 
-  await saveRead(env, { articles: Array.from(readSet) });
+  if (env.RSS_STORE) {
+    await env.RSS_STORE.put(`user:default:read`, JSON.stringify({ articles: Array.from(readSet) }));
+  }
 
   return jsonResponse({ articleId, read: isRead }, corsHeaders);
 }
@@ -814,6 +869,7 @@ function mergeSortArticles(feedIndexes, newestFirst = true, limit = 50) {
     articleRefs.push({
       feedId: selectedFeed.id,
       articleId: selectedArticle.id,
+      timestamp: selectedArticle.timestamp,
     });
     pointers[selectedFeedIndex]++;
   }
@@ -942,49 +998,71 @@ async function deleteArticlesForFeed(env, feedId, articleIds) {
 }
 
 /**
- * Get starred articles
+ * Get user subscriptions
+ * Returns object: {
+ *   feeds: [{
+ *     feedId,
+ *     caughtUpToTimestamp,
+ *     manuallyReadBefore: [articleId, ...]
+ *   }]
+ * }
+ */
+async function getUserSubscriptions(env, userId = DEFAULT_USER_ID) {
+  if (!env.RSS_STORE) {
+    return { feeds: [] };
+  }
+  const data = await env.RSS_STORE.get(`user:${userId}:subscriptions`);
+  return data ? JSON.parse(data) : { feeds: [] };
+}
+
+/**
+ * Save user subscriptions
+ */
+async function saveUserSubscriptions(env, subscriptions, userId = DEFAULT_USER_ID) {
+  if (!env.RSS_STORE) {
+    return;
+  }
+  await env.RSS_STORE.put(`user:${userId}:subscriptions`, JSON.stringify(subscriptions));
+}
+
+/**
+ * Get user starred articles
  * Returns object: {articles: [articleId, ...]}
  */
-async function getStarred(env) {
+async function getUserStarred(env, userId = DEFAULT_USER_ID) {
   if (!env.RSS_STORE) {
     return { articles: [] };
   }
-  const data = await env.RSS_STORE.get(STARRED_KEY);
+  const data = await env.RSS_STORE.get(`user:${userId}:starred`);
   return data ? JSON.parse(data) : { articles: [] };
 }
 
 /**
- * Save starred articles
- * Expects object: {articles: [articleId, ...]}
+ * Save user starred articles
  */
-async function saveStarred(env, starred) {
+async function saveUserStarred(env, starred, userId = DEFAULT_USER_ID) {
   if (!env.RSS_STORE) {
     return;
   }
-  await env.RSS_STORE.put(STARRED_KEY, JSON.stringify(starred));
+  await env.RSS_STORE.put(`user:${userId}:starred`, JSON.stringify(starred));
 }
 
 /**
- * Get read articles
- * Returns object: {articles: [articleId, ...]}
+ * Check if an article is read based on user's watermark + exceptions
+ * @param {Object} subscription - User's subscription for this feed
+ * @param {string} articleId - Article ID to check
+ * @param {number} articleTimestamp - Article timestamp
+ * @returns {boolean} - True if article is read
  */
-async function getRead(env) {
-  if (!env.RSS_STORE) {
-    return { articles: [] };
-  }
-  const data = await env.RSS_STORE.get(READ_KEY);
-  return data ? JSON.parse(data) : { articles: [] };
-}
+function isArticleRead(subscription, articleId, articleTimestamp) {
+  if (!subscription) return false;
 
-/**
- * Save read articles
- * Expects object: {articles: [articleId, ...]}
- */
-async function saveRead(env, read) {
-  if (!env.RSS_STORE) {
-    return;
+  // Article is read if it's before the watermark AND not in the exceptions list
+  if (articleTimestamp < subscription.caughtUpToTimestamp) {
+    return !subscription.manuallyReadBefore.includes(articleId);
   }
-  await env.RSS_STORE.put(READ_KEY, JSON.stringify(read));
+
+  return false;
 }
 
 // ============================================================================
