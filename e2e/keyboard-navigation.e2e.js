@@ -83,6 +83,11 @@ test.describe('Keyboard Navigation Tests', () => {
     await waitForPageLoad(page, workerUrl);
     await page.waitForTimeout(500);
 
+    // Click "Show read" to ensure all articles are visible
+    const showReadBtn = page.locator('button:has-text("Show read")');
+    await showReadBtn.click();
+    await page.waitForTimeout(300);
+
     const articles = page.locator('.article-card');
     const articleCount = await articles.count();
     expect(articleCount).toBeGreaterThan(1);
@@ -198,6 +203,11 @@ test.describe('Keyboard Navigation Tests', () => {
 
     await waitForPageLoad(page, workerUrl);
     await page.waitForTimeout(500);
+
+    // Click "Show read" button so articles remain visible after being marked as read
+    const showReadBtn = page.locator('button:has-text("Show read")');
+    await showReadBtn.click();
+    await page.waitForTimeout(300);
 
     // Select first article in All Articles
     await page.keyboard.press('j');

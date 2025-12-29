@@ -13,6 +13,7 @@ const state = {
     articles: [],
     starredArticles: new Set(),
     readArticles: new Set(),
+    manuallyUnreadArticles: new Set(),  // Articles user explicitly marked as unread
     currentFeed: 'all',
     currentRoute: '/',
     loading: false,
@@ -477,8 +478,12 @@ async function toggleRead(articleId) {
 
         if (result.read) {
             state.readArticles.add(articleId);
+            // When manually marking as read, remove from manually unread set
+            state.manuallyUnreadArticles.delete(articleId);
         } else {
             state.readArticles.delete(articleId);
+            // When manually marking as unread, add to manually unread set
+            state.manuallyUnreadArticles.add(articleId);
         }
 
         renderHome();
@@ -491,6 +496,33 @@ async function toggleRead(articleId) {
 function updateCounts() {
     elements.allCount.textContent = state.articles.length;
     elements.starredCount.textContent = state.starredArticles.size;
+}
+
+// Auto-mark article as read (respects manually unread state)
+async function autoMarkAsRead(articleId) {
+    // Don't auto-mark if user has manually marked as unread
+    if (state.manuallyUnreadArticles.has(articleId)) {
+        return;
+    }
+    // Don't mark if already read
+    if (state.readArticles.has(articleId)) {
+        return;
+    }
+    try {
+        const result = await toggleReadApi(articleId);
+        if (result.read) {
+            state.readArticles.add(articleId);
+            // Update UI without full re-render
+            const card = document.querySelector(`.article-card[data-id="${articleId}"]`);
+            if (card) {
+                card.classList.remove('unread');
+                const title = card.querySelector('.article-title');
+                if (title) title.style.fontWeight = '';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to auto-mark article as read:', error);
+    }
 }
 
 function toggleSortOrder() {
@@ -535,19 +567,9 @@ async function markScrolledArticlesAsRead() {
         // If the top of the card is above the header (scrolled past)
         if (rect.top < headerHeight) {
             const articleId = card.dataset.id;
-            if (articleId && !state.readArticles.has(articleId)) {
-                // Mark as read via API
-                try {
-                    const result = await toggleReadApi(articleId);
-                    if (result.read) {
-                        state.readArticles.add(articleId);
-                        // Update the card's class without full re-render
-                        card.classList.remove('unread');
-                        card.querySelector('.article-title').style.fontWeight = '';
-                    }
-                } catch (error) {
-                    console.error('Failed to mark article as read:', error);
-                }
+            // Use autoMarkAsRead which respects manually unread state
+            if (articleId) {
+                await autoMarkAsRead(articleId);
             }
         }
     }
@@ -865,6 +887,14 @@ function selectNextArticle() {
     if (state.selectedArticleIndex < 0) {
         selectArticle(0);
     } else {
+        // Mark current article as read before moving (if moving to next)
+        const currentCard = cards[state.selectedArticleIndex];
+        if (currentCard && state.selectedArticleIndex + 1 < cards.length) {
+            const articleId = currentCard.dataset.id;
+            if (articleId) {
+                autoMarkAsRead(articleId);
+            }
+        }
         selectArticle(state.selectedArticleIndex + 1);
     }
 }
@@ -876,6 +906,14 @@ function selectPreviousArticle() {
     if (state.selectedArticleIndex < 0) {
         selectArticle(0);
     } else {
+        // Mark current article as read before moving (if moving to previous)
+        const currentCard = cards[state.selectedArticleIndex];
+        if (currentCard && state.selectedArticleIndex > 0) {
+            const articleId = currentCard.dataset.id;
+            if (articleId) {
+                autoMarkAsRead(articleId);
+            }
+        }
         selectArticle(state.selectedArticleIndex - 1);
     }
 }
