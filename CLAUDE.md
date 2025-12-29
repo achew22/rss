@@ -116,6 +116,27 @@ wrangler whoami
 - Use ESM modules
 - Follow existing patterns in the codebase
 
+### Semantic HTML
+
+Always use proper semantic HTML elements instead of reimplementing browser features:
+
+- **Links**: Use `<a>` tags with `href` attributes for all navigational links and external URLs
+  - Include `target="_blank"` and `rel="noopener noreferrer"` for external links
+  - Users should be able to right-click, middle-click, and copy links
+
+- **Buttons**: Use `<button>` elements for interactive actions
+  - Never use `<div>` or `<span>` with click handlers for buttons
+  - Ensures proper keyboard navigation and accessibility
+
+- **Interactive Elements**: All clickable elements should be semantic (`<a>`, `<button>`, etc.)
+  - Avoid adding click handlers to non-interactive elements like `<li>`, `<div>`, or `<span>`
+
+- **Navigation**: Use native browser navigation features
+  - Don't prevent default link behavior unless absolutely necessary
+  - Let the browser handle link opening, history, and context menus
+
+Before adding any new HTML, ask: "Does the browser have a built-in element for this?"
+
 ## Key Files
 
 - `src/index.js` - Main Worker entry point with API routes
