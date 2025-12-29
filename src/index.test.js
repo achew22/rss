@@ -6,9 +6,20 @@ describe("RSS Reader Worker", () => {
   beforeEach(async () => {
     if (env.RSS_STORE) {
       await env.RSS_STORE.delete("feeds");
-      await env.RSS_STORE.delete("articles");
       await env.RSS_STORE.delete("starred");
       await env.RSS_STORE.delete("read");
+
+      // Delete all feed: keys
+      const feedKeys = await env.RSS_STORE.list({ prefix: "feed:" });
+      await Promise.all(
+        feedKeys.keys.map((key) => env.RSS_STORE.delete(key.name))
+      );
+
+      // Delete all article: keys
+      const articleKeys = await env.RSS_STORE.list({ prefix: "article:" });
+      await Promise.all(
+        articleKeys.keys.map((key) => env.RSS_STORE.delete(key.name))
+      );
     }
   });
 
