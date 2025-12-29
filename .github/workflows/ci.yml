@@ -55,15 +55,6 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test
 
-      - name: Commit screenshots to repo
-        if: success()
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add e2e/screenshots/
-          git diff --staged --quiet || git commit -m "Update E2E screenshots"
-          git push
-
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
