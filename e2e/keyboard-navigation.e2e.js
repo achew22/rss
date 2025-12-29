@@ -83,6 +83,11 @@ test.describe('Keyboard Navigation Tests', () => {
     await waitForPageLoad(page, workerUrl);
     await page.waitForTimeout(500);
 
+    // Click "Show read" to ensure all articles are visible
+    const showReadBtn = page.locator('button:has-text("Show read")');
+    await showReadBtn.click();
+    await page.waitForTimeout(300);
+
     const articles = page.locator('.article-card');
     const articleCount = await articles.count();
     expect(articleCount).toBeGreaterThan(1);
@@ -198,6 +203,11 @@ test.describe('Keyboard Navigation Tests', () => {
 
     await waitForPageLoad(page, workerUrl);
     await page.waitForTimeout(500);
+
+    // Click "Show read" button so articles remain visible after being marked as read
+    const showReadBtn = page.locator('button:has-text("Show read")');
+    await showReadBtn.click();
+    await page.waitForTimeout(300);
 
     // Select first article in All Articles
     await page.keyboard.press('j');
@@ -395,6 +405,90 @@ test.describe('Keyboard Navigation Tests', () => {
 
     await takeScreenshot(page, 'keyboard-14-after-star');
     console.log('✓ s key toggles star on selected article');
+  });
+
+  test('m key toggles read status on selected article', async ({ page }) => {
+    // Add a feed
+    await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
+
+    await waitForPageLoad(page, workerUrl);
+    await page.waitForTimeout(500);
+
+    // Click "Show read" button to disable hideRead filter so we can see the article after marking as read
+    const showReadBtn = page.locator('button:has-text("Show read")');
+    await showReadBtn.click();
+    await page.waitForTimeout(300);
+
+    // Wait for unread articles to appear (scroll to top to ensure articles haven't been auto-marked as read)
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(200);
+
+    // Find an unread article to test with
+    const unreadCards = page.locator('.article-card.unread');
+    const unreadCount = await unreadCards.count();
+
+    // If no unread articles, skip the unread assertion (previous tests may have marked them)
+    if (unreadCount > 0) {
+      // Select first article
+      await page.keyboard.press('j');
+      await page.waitForTimeout(200);
+
+      // Get the article ID
+      const selectedCard = page.locator('.article-card.focused');
+      const articleId = await selectedCard.getAttribute('data-id');
+
+      // Check initial read state
+      const initialUnread = await selectedCard.evaluate(el => el.classList.contains('unread'));
+
+      await takeScreenshot(page, 'keyboard-13b-before-read-toggle');
+
+      // Press 'm' to toggle read status
+      await page.keyboard.press('m');
+      await page.waitForTimeout(500);
+
+      // The re-render may change which card is focused, so find by ID
+      const updatedCard = page.locator(`.article-card[data-id="${articleId}"]`);
+      const newUnread = await updatedCard.evaluate(el => el.classList.contains('unread'));
+
+      // Read state should be toggled
+      expect(newUnread).toBe(!initialUnread);
+
+      await takeScreenshot(page, 'keyboard-14b-after-read-toggle');
+
+      // Press 'm' again to toggle back
+      await page.keyboard.press('m');
+      await page.waitForTimeout(500);
+
+      const finalCard = page.locator(`.article-card[data-id="${articleId}"]`);
+      const finalUnread = await finalCard.evaluate(el => el.classList.contains('unread'));
+
+      // Should be back to original state
+      expect(finalUnread).toBe(initialUnread);
+
+      await takeScreenshot(page, 'keyboard-14c-after-second-read-toggle');
+    } else {
+      // No unread articles available, test with any article
+      await page.keyboard.press('j');
+      await page.waitForTimeout(200);
+
+      const selectedCard = page.locator('.article-card.focused');
+      const articleId = await selectedCard.getAttribute('data-id');
+      const initialUnread = await selectedCard.evaluate(el => el.classList.contains('unread'));
+
+      // Press 'm' to toggle
+      await page.keyboard.press('m');
+      await page.waitForTimeout(500);
+
+      const updatedCard = page.locator(`.article-card[data-id="${articleId}"]`);
+      const newUnread = await updatedCard.evaluate(el => el.classList.contains('unread'));
+
+      // Read state should be toggled
+      expect(newUnread).toBe(!initialUnread);
+
+      await takeScreenshot(page, 'keyboard-14b-after-read-toggle');
+    }
+
+    console.log('✓ m key toggles read status on selected article');
   });
 
   test('full keyboard navigation workflow', async ({ page }) => {

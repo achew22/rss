@@ -12,11 +12,15 @@ const state = {
     feeds: [],
     articles: [],
     starredArticles: new Set(),
+    readArticles: new Set(),
+    manuallyUnreadArticles: new Set(),  // Articles user explicitly marked as unread
     currentFeed: 'all',
     currentRoute: '/',
     loading: false,
     error: null,
-    selectedArticleIndex: -1  // Track selected article for keyboard navigation
+    selectedArticleIndex: -1,  // Track selected article for keyboard navigation
+    sortOrder: 'oldest',       // 'oldest' (default) or 'newest'
+    hideRead: true             // Hide read articles by default
 };
 
 // DOM Elements
@@ -104,6 +108,11 @@ async function fetchArticles(feedId = null, starredOnly = false) {
             state.articles.filter(a => a.starred).map(a => a.id)
         );
 
+        // Update read articles set from API response
+        state.readArticles = new Set(
+            state.articles.filter(a => a.read).map(a => a.id)
+        );
+
         return state.articles;
     } catch (error) {
         console.error('Failed to fetch articles:', error);
@@ -128,6 +137,13 @@ async function removeFeedApi(feedId) {
 
 async function toggleStarApi(articleId) {
     const data = await apiRequest(`/api/articles/${articleId}/star`, {
+        method: 'POST'
+    });
+    return data;
+}
+
+async function toggleReadApi(articleId) {
+    const data = await apiRequest(`/api/articles/${articleId}/read`, {
         method: 'POST'
     });
     return data;
@@ -178,19 +194,37 @@ function handleHashChange() {
 function renderHome() {
     const articles = getFilteredArticles();
     const feedName = getFeedName(state.currentFeed);
+    const totalUnread = state.articles.filter(a => !state.readArticles.has(a.id)).length;
 
     elements.content.innerHTML = `
         <div class="articles-header">
             <div>
                 <h2>${feedName}</h2>
-                <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}</p>
+                <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}${state.hideRead ? ` (${totalUnread} unread)` : ''}</p>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-                Refresh
-            </button>
+            <div class="articles-controls">
+                <button class="btn btn-secondary btn-sm" onclick="toggleSortOrder()" title="Sort order">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M3 6h18M3 12h12M3 18h6"/>
+                    </svg>
+                    ${state.sortOrder === 'oldest' ? 'Oldest first' : 'Newest first'}
+                </button>
+                <button class="btn btn-secondary btn-sm ${state.hideRead ? '' : 'active'}" onclick="toggleHideRead()" title="${state.hideRead ? 'Show read articles' : 'Hide read articles'}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        ${state.hideRead
+                            ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/>'
+                            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+                        }
+                    </svg>
+                    ${state.hideRead ? 'Show read' : 'Hide read'}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
         </div>
         ${state.loading ? renderLoading() : ''}
         ${state.error ? renderError(state.error) : ''}
@@ -216,14 +250,18 @@ function renderHome() {
             }
         });
     });
+
+    // Set up scroll-based read marking
+    setupScrollReadMarking();
 }
 
 function renderArticleCard(article) {
     const isStarred = state.starredArticles.has(article.id);
+    const isRead = state.readArticles.has(article.id);
     const timeAgo = formatTimeAgo(new Date(article.date));
 
     return `
-        <article class="article-card" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
+        <article class="article-card${isRead ? '' : ' unread'}" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
             <div class="article-card-header">
                 <h3 class="article-title">${escapeHtml(article.title)}</h3>
                 <div class="article-actions">
@@ -385,13 +423,28 @@ function renderNotFound() {
 // ============================================================================
 
 function getFilteredArticles() {
-    if (state.currentFeed === 'all') {
-        return state.articles;
-    } else if (state.currentFeed === 'starred') {
-        return state.articles.filter(a => state.starredArticles.has(a.id));
-    } else {
-        return state.articles.filter(a => a.feedId === state.currentFeed);
+    let filtered = state.articles;
+
+    // Filter by feed
+    if (state.currentFeed === 'starred') {
+        filtered = filtered.filter(a => state.starredArticles.has(a.id));
+    } else if (state.currentFeed !== 'all') {
+        filtered = filtered.filter(a => a.feedId === state.currentFeed);
     }
+
+    // Filter out read articles if hideRead is enabled
+    if (state.hideRead) {
+        filtered = filtered.filter(a => !state.readArticles.has(a.id));
+    }
+
+    // Sort by date
+    filtered = [...filtered].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return state.sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
+    });
+
+    return filtered;
 }
 
 function getFeedName(feedId) {
@@ -419,9 +472,107 @@ async function toggleStar(articleId) {
     }
 }
 
+async function toggleRead(articleId) {
+    try {
+        const result = await toggleReadApi(articleId);
+
+        if (result.read) {
+            state.readArticles.add(articleId);
+            // When manually marking as read, remove from manually unread set
+            state.manuallyUnreadArticles.delete(articleId);
+        } else {
+            state.readArticles.delete(articleId);
+            // When manually marking as unread, add to manually unread set
+            state.manuallyUnreadArticles.add(articleId);
+        }
+
+        renderHome();
+    } catch (error) {
+        console.error('Failed to toggle read status:', error);
+        showNotification('Failed to update read status', 'error');
+    }
+}
+
 function updateCounts() {
     elements.allCount.textContent = state.articles.length;
     elements.starredCount.textContent = state.starredArticles.size;
+}
+
+// Auto-mark article as read (respects manually unread state)
+async function autoMarkAsRead(articleId) {
+    // Don't auto-mark if user has manually marked as unread
+    if (state.manuallyUnreadArticles.has(articleId)) {
+        return;
+    }
+    // Don't mark if already read
+    if (state.readArticles.has(articleId)) {
+        return;
+    }
+    try {
+        const result = await toggleReadApi(articleId);
+        if (result.read) {
+            state.readArticles.add(articleId);
+            // Update UI without full re-render
+            const card = document.querySelector(`.article-card[data-id="${articleId}"]`);
+            if (card) {
+                card.classList.remove('unread');
+                const title = card.querySelector('.article-title');
+                if (title) title.style.fontWeight = '';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to auto-mark article as read:', error);
+    }
+}
+
+function toggleSortOrder() {
+    state.sortOrder = state.sortOrder === 'oldest' ? 'newest' : 'oldest';
+    state.selectedArticleIndex = -1;  // Reset selection when reordering
+    renderHome();
+}
+
+function toggleHideRead() {
+    state.hideRead = !state.hideRead;
+    state.selectedArticleIndex = -1;  // Reset selection when filtering changes
+    renderHome();
+}
+
+// Scroll-based read marking
+let scrollReadTimeout = null;
+let scrollHandler = null;
+
+function setupScrollReadMarking() {
+    // Remove previous handler if it exists
+    if (scrollHandler) {
+        window.removeEventListener('scroll', scrollHandler);
+    }
+
+    scrollHandler = () => {
+        // Debounce scroll events
+        if (scrollReadTimeout) {
+            clearTimeout(scrollReadTimeout);
+        }
+        scrollReadTimeout = setTimeout(markScrolledArticlesAsRead, 150);
+    };
+
+    window.addEventListener('scroll', scrollHandler);
+}
+
+async function markScrolledArticlesAsRead() {
+    const cards = document.querySelectorAll('.article-card.unread');
+    const headerHeight = 64; // var(--header-height)
+
+    for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        // If the top of the card is above the header (scrolled past)
+        if (rect.top < headerHeight) {
+            const articleId = card.dataset.id;
+            // Use autoMarkAsRead which respects manually unread state
+            if (articleId) {
+                await autoMarkAsRead(articleId);
+            }
+        }
+    }
 }
 
 function formatTimeAgo(date) {
@@ -736,6 +887,14 @@ function selectNextArticle() {
     if (state.selectedArticleIndex < 0) {
         selectArticle(0);
     } else {
+        // Mark current article as read before moving (if moving to next)
+        const currentCard = cards[state.selectedArticleIndex];
+        if (currentCard && state.selectedArticleIndex + 1 < cards.length) {
+            const articleId = currentCard.dataset.id;
+            if (articleId) {
+                autoMarkAsRead(articleId);
+            }
+        }
         selectArticle(state.selectedArticleIndex + 1);
     }
 }
@@ -747,6 +906,14 @@ function selectPreviousArticle() {
     if (state.selectedArticleIndex < 0) {
         selectArticle(0);
     } else {
+        // Mark current article as read before moving (if moving to previous)
+        const currentCard = cards[state.selectedArticleIndex];
+        if (currentCard && state.selectedArticleIndex > 0) {
+            const articleId = currentCard.dataset.id;
+            if (articleId) {
+                autoMarkAsRead(articleId);
+            }
+        }
         selectArticle(state.selectedArticleIndex - 1);
     }
 }
@@ -779,6 +946,17 @@ function toggleSelectedArticleStar() {
         const articleId = card.dataset.id;
         if (articleId) {
             toggleStar(articleId);
+        }
+    }
+}
+
+function toggleSelectedArticleRead() {
+    const cards = getVisibleArticleCards();
+    if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
+        const card = cards[state.selectedArticleIndex];
+        const articleId = card.dataset.id;
+        if (articleId) {
+            toggleRead(articleId);
         }
     }
 }
@@ -824,6 +1002,12 @@ function handleKeyboardNavigation(event) {
                 toggleSelectedArticleStar();
             }
             break;
+        case 'm':
+            if (state.selectedArticleIndex >= 0) {
+                event.preventDefault();
+                toggleSelectedArticleRead();
+            }
+            break;
     }
 }
 
@@ -833,6 +1017,8 @@ window.navigate = navigate;
 window.removeFeed = removeFeed;
 window.refreshFeed = refreshFeed;
 window.refreshAllFeeds = refreshAllFeeds;
+window.toggleSortOrder = toggleSortOrder;
+window.toggleHideRead = toggleHideRead;
 
 // ============================================================================
 // Event Listeners
