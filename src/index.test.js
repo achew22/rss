@@ -9,16 +9,10 @@ describe("RSS Reader Worker", () => {
       await env.RSS_STORE.delete("starred");
       await env.RSS_STORE.delete("read");
 
-      // Delete all feed: keys
+      // Delete all feed: keys (includes feed indexes and nested articles)
       const feedKeys = await env.RSS_STORE.list({ prefix: "feed:" });
       await Promise.all(
         feedKeys.keys.map((key) => env.RSS_STORE.delete(key.name))
-      );
-
-      // Delete all article: keys
-      const articleKeys = await env.RSS_STORE.list({ prefix: "article:" });
-      await Promise.all(
-        articleKeys.keys.map((key) => env.RSS_STORE.delete(key.name))
       );
     }
   });
