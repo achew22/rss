@@ -12,6 +12,7 @@ const state = {
     feeds: [],
     articles: [],
     starredArticles: new Set(),
+    readArticles: new Set(),
     currentFeed: 'all',
     currentRoute: '/',
     loading: false,
@@ -104,6 +105,11 @@ async function fetchArticles(feedId = null, starredOnly = false) {
             state.articles.filter(a => a.starred).map(a => a.id)
         );
 
+        // Update read articles set from API response
+        state.readArticles = new Set(
+            state.articles.filter(a => a.read).map(a => a.id)
+        );
+
         return state.articles;
     } catch (error) {
         console.error('Failed to fetch articles:', error);
@@ -128,6 +134,13 @@ async function removeFeedApi(feedId) {
 
 async function toggleStarApi(articleId) {
     const data = await apiRequest(`/api/articles/${articleId}/star`, {
+        method: 'POST'
+    });
+    return data;
+}
+
+async function toggleReadApi(articleId) {
+    const data = await apiRequest(`/api/articles/${articleId}/read`, {
         method: 'POST'
     });
     return data;
@@ -220,10 +233,11 @@ function renderHome() {
 
 function renderArticleCard(article) {
     const isStarred = state.starredArticles.has(article.id);
+    const isRead = state.readArticles.has(article.id);
     const timeAgo = formatTimeAgo(new Date(article.date));
 
     return `
-        <article class="article-card" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
+        <article class="article-card${isRead ? '' : ' unread'}" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
             <div class="article-card-header">
                 <h3 class="article-title">${escapeHtml(article.title)}</h3>
                 <div class="article-actions">
@@ -416,6 +430,23 @@ async function toggleStar(articleId) {
     } catch (error) {
         console.error('Failed to toggle star:', error);
         showNotification('Failed to update star status', 'error');
+    }
+}
+
+async function toggleRead(articleId) {
+    try {
+        const result = await toggleReadApi(articleId);
+
+        if (result.read) {
+            state.readArticles.add(articleId);
+        } else {
+            state.readArticles.delete(articleId);
+        }
+
+        renderHome();
+    } catch (error) {
+        console.error('Failed to toggle read status:', error);
+        showNotification('Failed to update read status', 'error');
     }
 }
 
@@ -783,6 +814,17 @@ function toggleSelectedArticleStar() {
     }
 }
 
+function toggleSelectedArticleRead() {
+    const cards = getVisibleArticleCards();
+    if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
+        const card = cards[state.selectedArticleIndex];
+        const articleId = card.dataset.id;
+        if (articleId) {
+            toggleRead(articleId);
+        }
+    }
+}
+
 function handleKeyboardNavigation(event) {
     // Don't handle keyboard events when typing in inputs or modals
     if (event.target.tagName === 'INPUT' ||
@@ -822,6 +864,12 @@ function handleKeyboardNavigation(event) {
             if (state.selectedArticleIndex >= 0) {
                 event.preventDefault();
                 toggleSelectedArticleStar();
+            }
+            break;
+        case 'm':
+            if (state.selectedArticleIndex >= 0) {
+                event.preventDefault();
+                toggleSelectedArticleRead();
             }
             break;
     }

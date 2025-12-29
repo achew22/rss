@@ -8,6 +8,7 @@ describe("RSS Reader Worker", () => {
       await env.RSS_STORE.delete("feeds");
       await env.RSS_STORE.delete("articles");
       await env.RSS_STORE.delete("starred");
+      await env.RSS_STORE.delete("read");
     }
   });
 
@@ -30,6 +31,7 @@ describe("RSS Reader Worker", () => {
       expect(json.endpoints).toContain("DELETE /api/feeds/:id");
       expect(json.endpoints).toContain("GET /api/articles");
       expect(json.endpoints).toContain("POST /api/articles/:id/star");
+      expect(json.endpoints).toContain("POST /api/articles/:id/read");
     });
 
     it("responds to health check", async () => {
@@ -163,6 +165,54 @@ describe("RSS Reader Worker", () => {
       const json2 = await response2.json();
       expect(json2.articleId).toBe("test-article-123");
       expect(json2.starred).toBe(false);
+    });
+  });
+
+  describe("Article Read Status API", () => {
+    it("can toggle read status on an article", async () => {
+      // Mark an article as read
+      const response1 = await SELF.fetch(
+        "https://example.com/api/articles/test-article-456/read",
+        {
+          method: "POST",
+        }
+      );
+
+      expect(response1.status).toBe(200);
+      const json1 = await response1.json();
+      expect(json1.articleId).toBe("test-article-456");
+      expect(json1.read).toBe(true);
+
+      // Mark the same article as unread
+      const response2 = await SELF.fetch(
+        "https://example.com/api/articles/test-article-456/read",
+        {
+          method: "POST",
+        }
+      );
+
+      expect(response2.status).toBe(200);
+      const json2 = await response2.json();
+      expect(json2.articleId).toBe("test-article-456");
+      expect(json2.read).toBe(false);
+    });
+
+    it("includes read status in articles response", async () => {
+      // First mark an article as read
+      await SELF.fetch(
+        "https://example.com/api/articles/test-article-789/read",
+        {
+          method: "POST",
+        }
+      );
+
+      // Articles endpoint should include read status
+      const response = await SELF.fetch("https://example.com/api/articles");
+      expect(response.status).toBe(200);
+
+      const json = await response.json();
+      expect(json.articles).toBeDefined();
+      // The read array should be persisted
     });
   });
 

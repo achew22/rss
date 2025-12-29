@@ -375,6 +375,14 @@ input {
     outline-offset: 2px;
 }
 
+.article-card.unread {
+    border-left: 4px solid var(--color-primary);
+}
+
+.article-card.unread .article-title {
+    font-weight: 700;
+}
+
 .article-card-header {
     display: flex;
     align-items: flex-start;

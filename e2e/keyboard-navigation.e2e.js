@@ -397,6 +397,54 @@ test.describe('Keyboard Navigation Tests', () => {
     console.log('✓ s key toggles star on selected article');
   });
 
+  test('m key toggles read status on selected article', async ({ page }) => {
+    // Add a feed
+    await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
+
+    await waitForPageLoad(page, workerUrl);
+    await page.waitForTimeout(500);
+
+    // Select first article
+    await page.keyboard.press('j');
+    await page.waitForTimeout(200);
+
+    // Get the article ID
+    const selectedCard = page.locator('.article-card.focused');
+    const articleId = await selectedCard.getAttribute('data-id');
+
+    // Check initial read state - articles start as unread (have 'unread' class)
+    const initialUnread = await selectedCard.evaluate(el => el.classList.contains('unread'));
+    expect(initialUnread).toBe(true); // New articles should be unread
+
+    await takeScreenshot(page, 'keyboard-13b-before-read-toggle');
+
+    // Press 'm' to toggle read status (mark as read)
+    await page.keyboard.press('m');
+    await page.waitForTimeout(500);
+
+    // The re-render may change which card is focused, so find by ID
+    const updatedCard = page.locator(`.article-card[data-id="${articleId}"]`);
+    const newUnread = await updatedCard.evaluate(el => el.classList.contains('unread'));
+
+    // Article should now be read (no unread class)
+    expect(newUnread).toBe(false);
+
+    await takeScreenshot(page, 'keyboard-14b-after-read-toggle');
+
+    // Press 'm' again to mark as unread
+    await page.keyboard.press('m');
+    await page.waitForTimeout(500);
+
+    const finalCard = page.locator(`.article-card[data-id="${articleId}"]`);
+    const finalUnread = await finalCard.evaluate(el => el.classList.contains('unread'));
+
+    // Article should be unread again
+    expect(finalUnread).toBe(true);
+
+    await takeScreenshot(page, 'keyboard-14c-after-second-read-toggle');
+    console.log('✓ m key toggles read status on selected article');
+  });
+
   test('full keyboard navigation workflow', async ({ page }) => {
     // Add feeds
     await addFeed(`${mockServerUrl}/feeds/tech-news/rss`, 'Tech News', page);
