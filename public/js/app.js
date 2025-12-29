@@ -15,7 +15,8 @@ const state = {
     currentFeed: 'all',
     currentRoute: '/',
     loading: false,
-    error: null
+    error: null,
+    selectedArticleIndex: -1  // Track selected article for keyboard navigation
 };
 
 // DOM Elements
@@ -152,6 +153,7 @@ async function refreshAllFeedsApi() {
 
 function navigate(path) {
     state.currentRoute = path;
+    state.selectedArticleIndex = -1;  // Reset selection when navigating
     window.location.hash = path;
 
     // Update nav links
@@ -503,6 +505,7 @@ function renderUserFeeds() {
 
 async function selectFeed(feedId) {
     state.currentFeed = feedId;
+    state.selectedArticleIndex = -1;  // Reset selection when switching feeds
 
     // Update active states
     document.querySelectorAll('.feed-item').forEach(item => {
@@ -699,6 +702,115 @@ function closeSidebar() {
     document.body.style.overflow = '';
 }
 
+// ============================================================================
+// Keyboard Navigation (Vim-style)
+// ============================================================================
+
+function getVisibleArticleCards() {
+    return Array.from(elements.content.querySelectorAll('.article-card'));
+}
+
+function selectArticle(index) {
+    const cards = getVisibleArticleCards();
+    if (cards.length === 0) return;
+
+    // Clamp index to valid range
+    const newIndex = Math.max(0, Math.min(index, cards.length - 1));
+
+    // Remove focus from previously selected card
+    cards.forEach(card => card.classList.remove('focused'));
+
+    // Focus the new card
+    state.selectedArticleIndex = newIndex;
+    const selectedCard = cards[newIndex];
+    selectedCard.classList.add('focused');
+
+    // Scroll the card into view
+    selectedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function selectNextArticle() {
+    const cards = getVisibleArticleCards();
+    if (cards.length === 0) return;
+
+    if (state.selectedArticleIndex < 0) {
+        selectArticle(0);
+    } else {
+        selectArticle(state.selectedArticleIndex + 1);
+    }
+}
+
+function selectPreviousArticle() {
+    const cards = getVisibleArticleCards();
+    if (cards.length === 0) return;
+
+    if (state.selectedArticleIndex < 0) {
+        selectArticle(0);
+    } else {
+        selectArticle(state.selectedArticleIndex - 1);
+    }
+}
+
+function openSelectedArticle() {
+    const cards = getVisibleArticleCards();
+    if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
+        const card = cards[state.selectedArticleIndex];
+        const link = card.dataset.link;
+        if (link) {
+            window.open(link, '_blank');
+        }
+    }
+}
+
+function toggleSelectedArticleStar() {
+    const cards = getVisibleArticleCards();
+    if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
+        const card = cards[state.selectedArticleIndex];
+        const articleId = card.dataset.id;
+        if (articleId) {
+            toggleStar(articleId);
+        }
+    }
+}
+
+function handleKeyboardNavigation(event) {
+    // Don't handle keyboard events when typing in inputs or modals
+    if (event.target.tagName === 'INPUT' ||
+        event.target.tagName === 'TEXTAREA' ||
+        elements.addFeedModal.classList.contains('active')) {
+        return;
+    }
+
+    // Only handle keyboard navigation on the home view
+    if (state.currentRoute !== '/') {
+        return;
+    }
+
+    switch (event.key) {
+        case 'j':
+            event.preventDefault();
+            selectNextArticle();
+            break;
+        case 'k':
+            event.preventDefault();
+            selectPreviousArticle();
+            break;
+        case 'Enter':
+        case 'o':
+            if (state.selectedArticleIndex >= 0) {
+                event.preventDefault();
+                openSelectedArticle();
+            }
+            break;
+        case 's':
+            if (state.selectedArticleIndex >= 0) {
+                event.preventDefault();
+                toggleSelectedArticleStar();
+            }
+            break;
+    }
+}
+
 // Make functions globally available
 window.openAddFeedModal = openAddFeedModal;
 window.navigate = navigate;
@@ -747,6 +859,9 @@ function initEventListeners() {
 
     // Hash change for routing
     window.addEventListener('hashchange', handleHashChange);
+
+    // Keyboard navigation (vim-style)
+    document.addEventListener('keydown', handleKeyboardNavigation);
 }
 
 // ============================================================================
