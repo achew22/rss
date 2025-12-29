@@ -269,6 +269,12 @@ input {
     border-radius: var(--radius);
     cursor: pointer;
     transition: all var(--transition);
+    width: 100%;
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+    font-size: inherit;
 }
 
 .feed-item:hover {
@@ -374,12 +380,10 @@ input {
     border: 1px solid var(--color-border);
     padding: 1.25rem;
     transition: all var(--transition);
-    cursor: pointer;
 }
 
 .article-card:hover {
     box-shadow: var(--shadow-md);
-    border-color: var(--color-primary);
 }
 
 .article-card.focused {
@@ -410,10 +414,13 @@ input {
     font-weight: 600;
     line-height: 1.4;
     color: var(--color-text);
+    text-decoration: none;
+    display: inline;
 }
 
 .article-title:hover {
     color: var(--color-primary);
+    text-decoration: underline;
 }
 
 .article-actions {

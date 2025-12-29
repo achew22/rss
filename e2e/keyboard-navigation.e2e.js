@@ -306,9 +306,9 @@ test.describe('Keyboard Navigation Tests', () => {
     await page.keyboard.press('j');
     await page.waitForTimeout(200);
 
-    // Get the link of the selected article
+    // Get the link of the selected article from the <a> tag
     const selectedCard = page.locator('.article-card.focused');
-    const articleLink = await selectedCard.getAttribute('data-link');
+    const articleLink = await selectedCard.locator('.article-title').getAttribute('href');
     expect(articleLink).toBeTruthy();
 
     // Listen for popup (new tab)
@@ -342,9 +342,9 @@ test.describe('Keyboard Navigation Tests', () => {
     await page.keyboard.press('j');
     await page.waitForTimeout(200);
 
-    // Get the link of the selected article
+    // Get the link of the selected article from the <a> tag
     const selectedCard = page.locator('.article-card.focused');
-    const articleLink = await selectedCard.getAttribute('data-link');
+    const articleLink = await selectedCard.locator('.article-title').getAttribute('href');
     expect(articleLink).toBeTruthy();
 
     // Listen for popup (new tab)

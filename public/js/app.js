@@ -237,17 +237,8 @@ function renderHome() {
     elements.content.querySelectorAll('.article-action-star').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             toggleStar(btn.dataset.id);
-        });
-    });
-
-    // Add click handler for article cards to open the link
-    elements.content.querySelectorAll('.article-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const link = card.dataset.link;
-            if (link) {
-                window.open(link, '_blank');
-            }
         });
     });
 
@@ -261,9 +252,9 @@ function renderArticleCard(article) {
     const timeAgo = formatTimeAgo(new Date(article.date));
 
     return `
-        <article class="article-card${isRead ? '' : ' unread'}" data-id="${article.id}" data-link="${escapeHtml(article.link || '')}">
+        <article class="article-card${isRead ? '' : ' unread'}" data-id="${article.id}">
             <div class="article-card-header">
-                <h3 class="article-title">${escapeHtml(article.title)}</h3>
+                <h3><a href="${escapeHtml(article.link || '#')}" class="article-title" target="_blank" rel="noopener noreferrer">${escapeHtml(article.title)}</a></h3>
                 <div class="article-actions">
                     <button class="article-action article-action-star ${isStarred ? 'starred' : ''}" data-id="${article.id}" title="${isStarred ? 'Unstar' : 'Star'}">
                         <svg viewBox="0 0 24 24" fill="${isStarred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -637,14 +628,16 @@ function showNotification(message, type = 'info') {
 
 function renderUserFeeds() {
     elements.userFeeds.innerHTML = state.feeds.map(feed => `
-        <li class="feed-item" data-feed="${feed.id}">
-            <span class="feed-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/>
-                </svg>
-            </span>
-            <span class="feed-name">${escapeHtml(feed.name)}</span>
-            <span class="feed-count">${feed.count || 0}</span>
+        <li>
+            <button class="feed-item" data-feed="${feed.id}">
+                <span class="feed-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/>
+                    </svg>
+                </span>
+                <span class="feed-name">${escapeHtml(feed.name)}</span>
+                <span class="feed-count">${feed.count || 0}</span>
+            </button>
         </li>
     `).join('');
 
@@ -922,8 +915,8 @@ function openSelectedArticle(background = false) {
     const cards = getVisibleArticleCards();
     if (state.selectedArticleIndex >= 0 && state.selectedArticleIndex < cards.length) {
         const card = cards[state.selectedArticleIndex];
-        const link = card.dataset.link;
-        if (link) {
+        const linkElement = card.querySelector('.article-title');
+        if (linkElement && linkElement.href) {
             if (background) {
                 // Listen for blur event and immediately refocus
                 const refocus = () => {
@@ -931,9 +924,9 @@ function openSelectedArticle(background = false) {
                     setTimeout(() => window.focus(), 0);
                 };
                 window.addEventListener('blur', refocus);
-                window.open(link, '_blank');
+                window.open(linkElement.href, '_blank');
             } else {
-                window.open(link, '_blank');
+                window.open(linkElement.href, '_blank');
             }
         }
     }
