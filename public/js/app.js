@@ -17,7 +17,9 @@ const state = {
     currentRoute: '/',
     loading: false,
     error: null,
-    selectedArticleIndex: -1  // Track selected article for keyboard navigation
+    selectedArticleIndex: -1,  // Track selected article for keyboard navigation
+    sortOrder: 'oldest',       // 'oldest' (default) or 'newest'
+    hideRead: true             // Hide read articles by default
 };
 
 // DOM Elements
@@ -191,19 +193,37 @@ function handleHashChange() {
 function renderHome() {
     const articles = getFilteredArticles();
     const feedName = getFeedName(state.currentFeed);
+    const totalUnread = state.articles.filter(a => !state.readArticles.has(a.id)).length;
 
     elements.content.innerHTML = `
         <div class="articles-header">
             <div>
                 <h2>${feedName}</h2>
-                <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}</p>
+                <p class="articles-meta">${articles.length} article${articles.length !== 1 ? 's' : ''}${state.hideRead ? ` (${totalUnread} unread)` : ''}</p>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-                Refresh
-            </button>
+            <div class="articles-controls">
+                <button class="btn btn-secondary btn-sm" onclick="toggleSortOrder()" title="Sort order">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M3 6h18M3 12h12M3 18h6"/>
+                    </svg>
+                    ${state.sortOrder === 'oldest' ? 'Oldest first' : 'Newest first'}
+                </button>
+                <button class="btn btn-secondary btn-sm ${state.hideRead ? '' : 'active'}" onclick="toggleHideRead()" title="${state.hideRead ? 'Show read articles' : 'Hide read articles'}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        ${state.hideRead
+                            ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/>'
+                            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+                        }
+                    </svg>
+                    ${state.hideRead ? 'Show read' : 'Hide read'}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="refreshAllFeeds()" title="Refresh all feeds">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
         </div>
         ${state.loading ? renderLoading() : ''}
         ${state.error ? renderError(state.error) : ''}
@@ -229,6 +249,9 @@ function renderHome() {
             }
         });
     });
+
+    // Set up scroll-based read marking
+    setupScrollReadMarking();
 }
 
 function renderArticleCard(article) {
@@ -399,13 +422,28 @@ function renderNotFound() {
 // ============================================================================
 
 function getFilteredArticles() {
-    if (state.currentFeed === 'all') {
-        return state.articles;
-    } else if (state.currentFeed === 'starred') {
-        return state.articles.filter(a => state.starredArticles.has(a.id));
-    } else {
-        return state.articles.filter(a => a.feedId === state.currentFeed);
+    let filtered = state.articles;
+
+    // Filter by feed
+    if (state.currentFeed === 'starred') {
+        filtered = filtered.filter(a => state.starredArticles.has(a.id));
+    } else if (state.currentFeed !== 'all') {
+        filtered = filtered.filter(a => a.feedId === state.currentFeed);
     }
+
+    // Filter out read articles if hideRead is enabled
+    if (state.hideRead) {
+        filtered = filtered.filter(a => !state.readArticles.has(a.id));
+    }
+
+    // Sort by date
+    filtered = [...filtered].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return state.sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
+    });
+
+    return filtered;
 }
 
 function getFeedName(feedId) {
@@ -453,6 +491,66 @@ async function toggleRead(articleId) {
 function updateCounts() {
     elements.allCount.textContent = state.articles.length;
     elements.starredCount.textContent = state.starredArticles.size;
+}
+
+function toggleSortOrder() {
+    state.sortOrder = state.sortOrder === 'oldest' ? 'newest' : 'oldest';
+    state.selectedArticleIndex = -1;  // Reset selection when reordering
+    renderHome();
+}
+
+function toggleHideRead() {
+    state.hideRead = !state.hideRead;
+    state.selectedArticleIndex = -1;  // Reset selection when filtering changes
+    renderHome();
+}
+
+// Scroll-based read marking
+let scrollReadTimeout = null;
+let scrollHandler = null;
+
+function setupScrollReadMarking() {
+    // Remove previous handler if it exists
+    if (scrollHandler) {
+        window.removeEventListener('scroll', scrollHandler);
+    }
+
+    scrollHandler = () => {
+        // Debounce scroll events
+        if (scrollReadTimeout) {
+            clearTimeout(scrollReadTimeout);
+        }
+        scrollReadTimeout = setTimeout(markScrolledArticlesAsRead, 150);
+    };
+
+    window.addEventListener('scroll', scrollHandler);
+}
+
+async function markScrolledArticlesAsRead() {
+    const cards = document.querySelectorAll('.article-card.unread');
+    const headerHeight = 64; // var(--header-height)
+
+    for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        // If the top of the card is above the header (scrolled past)
+        if (rect.top < headerHeight) {
+            const articleId = card.dataset.id;
+            if (articleId && !state.readArticles.has(articleId)) {
+                // Mark as read via API
+                try {
+                    const result = await toggleReadApi(articleId);
+                    if (result.read) {
+                        state.readArticles.add(articleId);
+                        // Update the card's class without full re-render
+                        card.classList.remove('unread');
+                        card.querySelector('.article-title').style.fontWeight = '';
+                    }
+                } catch (error) {
+                    console.error('Failed to mark article as read:', error);
+                }
+            }
+        }
+    }
 }
 
 function formatTimeAgo(date) {
@@ -881,6 +979,8 @@ window.navigate = navigate;
 window.removeFeed = removeFeed;
 window.refreshFeed = refreshFeed;
 window.refreshAllFeeds = refreshAllFeeds;
+window.toggleSortOrder = toggleSortOrder;
+window.toggleHideRead = toggleHideRead;
 
 // ============================================================================
 // Event Listeners

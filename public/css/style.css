@@ -337,6 +337,20 @@ input {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.articles-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.articles-controls .btn.active {
+    background-color: var(--color-primary);
+    color: white;
 }
 
 .articles-header h2 {
