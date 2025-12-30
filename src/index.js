@@ -8,8 +8,6 @@
 
 import { Storage } from "./storage.js";
 
-const DEFAULT_USER_ID = "default"; // Single user for now
-
 /**
  * Get or create storage instance from env
  */
@@ -18,6 +16,23 @@ function getStorage(env) {
     throw new Error("RSS_STORE not available");
   }
   return new Storage(env.RSS_STORE);
+}
+
+/**
+ * Get user ID from request
+ * In production, extracts from Cloudflare Zero Trust headers
+ * Falls back to "default" for local development
+ */
+function getUserId(request) {
+  // Try to get user email from Cloudflare Access headers
+  const userEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (userEmail) {
+    // Use email as user ID (could be hashed or mapped to internal ID)
+    return userEmail;
+  }
+
+  // Fallback to default for local development
+  return "default";
 }
 
 export default {
@@ -77,7 +92,7 @@ async function handleApiRequest(request, url, env, ctx) {
     // Feed endpoints
     if (path === "/api/feeds") {
       if (method === "GET") {
-        return await handleGetFeeds(env, corsHeaders);
+        return await handleGetFeeds(request, env, corsHeaders);
       }
       if (method === "POST") {
         return await handleAddFeed(request, env, corsHeaders);
@@ -87,35 +102,35 @@ async function handleApiRequest(request, url, env, ctx) {
     // Delete feed
     const feedDeleteMatch = path.match(/^\/api\/feeds\/([^/]+)$/);
     if (feedDeleteMatch && method === "DELETE") {
-      return await handleDeleteFeed(feedDeleteMatch[1], env, corsHeaders);
+      return await handleDeleteFeed(request, feedDeleteMatch[1], env, corsHeaders);
     }
 
     // Refresh specific feed
     const feedRefreshMatch = path.match(/^\/api\/feeds\/([^/]+)\/refresh$/);
     if (feedRefreshMatch && method === "POST") {
-      return await handleRefreshFeed(feedRefreshMatch[1], env, corsHeaders);
+      return await handleRefreshFeed(request, feedRefreshMatch[1], env, corsHeaders);
     }
 
     // Article endpoints
     if (path === "/api/articles" && method === "GET") {
-      return await handleGetArticles(url, env, corsHeaders);
+      return await handleGetArticles(request, url, env, corsHeaders);
     }
 
     // Star/unstar article
     const starMatch = path.match(/^\/api\/articles\/([^/]+)\/star$/);
     if (starMatch && method === "POST") {
-      return await handleToggleStar(starMatch[1], env, corsHeaders);
+      return await handleToggleStar(request, starMatch[1], env, corsHeaders);
     }
 
     // Mark article as read/unread
     const readMatch = path.match(/^\/api\/articles\/([^/]+)\/read$/);
     if (readMatch && method === "POST") {
-      return await handleToggleRead(readMatch[1], env, corsHeaders);
+      return await handleToggleRead(request, readMatch[1], env, corsHeaders);
     }
 
     // Refresh all feeds
     if (path === "/api/refresh" && method === "POST") {
-      return await handleRefreshAll(env, corsHeaders);
+      return await handleRefreshAll(request, env, corsHeaders);
     }
 
     // Default API response
@@ -150,9 +165,10 @@ async function handleApiRequest(request, url, env, ctx) {
 /**
  * Get all feeds (user's subscribed feeds)
  */
-async function handleGetFeeds(env, corsHeaders) {
+async function handleGetFeeds(request, env, corsHeaders) {
   const storage = getStorage(env);
-  const userSubs = await storage.getUserSubscriptions(DEFAULT_USER_ID);
+  const userId = getUserId(request);
+  const userSubs = await storage.getUserSubscriptions(userId);
   const feeds = await storage.getFeeds();
 
   // Get only feeds user is subscribed to
@@ -178,6 +194,7 @@ async function handleGetFeeds(env, corsHeaders) {
  */
 async function handleAddFeed(request, env, corsHeaders) {
   const storage = getStorage(env);
+  const userId = getUserId(request);
   const body = await request.json();
   const { url, name } = body;
 
@@ -224,7 +241,7 @@ async function handleAddFeed(request, env, corsHeaders) {
   await storage.addFeed(newFeed);
 
   // Add to user's subscriptions with watermark at 0 (all articles unread)
-  await storage.addUserSubscription(newFeedId, DEFAULT_USER_ID);
+  await storage.addUserSubscription(newFeedId, userId);
 
   // Create articles from the feed
   const newArticles = parsedFeed.items.map((item) => ({
@@ -265,8 +282,9 @@ async function handleAddFeed(request, env, corsHeaders) {
 /**
  * Delete a feed
  */
-async function handleDeleteFeed(feedId, env, corsHeaders) {
+async function handleDeleteFeed(request, feedId, env, corsHeaders) {
   const storage = getStorage(env);
+  const userId = getUserId(request);
   const feeds = await storage.getFeeds();
   const feed = feeds.find((f) => f.id === feedId);
 
@@ -282,17 +300,17 @@ async function handleDeleteFeed(feedId, env, corsHeaders) {
   await storage.removeFeed(feedId);
 
   // Remove from user's subscriptions
-  await storage.removeUserSubscription(feedId, DEFAULT_USER_ID);
+  await storage.removeUserSubscription(feedId, userId);
 
   // Remove starred status for deleted articles
   const articleIdsSet = new Set(articleIds);
-  const starred = await storage.getUserStarred(DEFAULT_USER_ID);
+  const starred = await storage.getUserStarred(userId);
   const remainingStarred = starred.articles.filter(
     (id) => !articleIdsSet.has(id)
   );
   if (env.RSS_STORE) {
     await env.RSS_STORE.put(
-      `user:${DEFAULT_USER_ID}:starred`,
+      `user:${userId}:starred`,
       JSON.stringify({ articles: remainingStarred })
     );
   }
@@ -303,7 +321,7 @@ async function handleDeleteFeed(feedId, env, corsHeaders) {
 /**
  * Refresh a specific feed
  */
-async function handleRefreshFeed(feedId, env, corsHeaders) {
+async function handleRefreshFeed(request, feedId, env, corsHeaders) {
   const storage = getStorage(env);
   const feeds = await storage.getFeeds();
   const feedMeta = feeds.find((f) => f.id === feedId);
@@ -446,7 +464,7 @@ async function refreshAllFeeds(env) {
 /**
  * Refresh all feeds (API handler)
  */
-async function handleRefreshAll(env, corsHeaders) {
+async function handleRefreshAll(request, env, corsHeaders) {
   const results = await refreshAllFeeds(env);
   return jsonResponse({ results }, corsHeaders);
 }
@@ -454,10 +472,11 @@ async function handleRefreshAll(env, corsHeaders) {
 /**
  * Get all articles
  */
-async function handleGetArticles(url, env, corsHeaders) {
+async function handleGetArticles(request, url, env, corsHeaders) {
   const storage = getStorage(env);
-  const userSubs = await storage.getUserSubscriptions(DEFAULT_USER_ID);
-  const starred = await storage.getUserStarred(DEFAULT_USER_ID);
+  const userId = getUserId(request);
+  const userSubs = await storage.getUserSubscriptions(userId);
+  const starred = await storage.getUserStarred(userId);
   const starredSet = new Set(starred.articles);
 
   // Build subscription lookup map
@@ -528,7 +547,7 @@ async function handleGetArticles(url, env, corsHeaders) {
   const articles = await storage.getArticles(articleRefs);
 
   // Get manual read list
-  const readData = await storage.getUserRead(DEFAULT_USER_ID);
+  const readData = await storage.getUserRead(userId);
   const manualReadSet = new Set(readData.articles);
 
   // Add starred and read status to each article
@@ -552,14 +571,15 @@ async function handleGetArticles(url, env, corsHeaders) {
 /**
  * Toggle star status for an article
  */
-async function handleToggleStar(articleId, env, corsHeaders) {
+async function handleToggleStar(request, articleId, env, corsHeaders) {
   const storage = getStorage(env);
-  const isStarred = await storage.isArticleStarred(articleId, DEFAULT_USER_ID);
+  const userId = getUserId(request);
+  const isStarred = await storage.isArticleStarred(articleId, userId);
 
   if (isStarred) {
-    await storage.removeStarredArticle(articleId, DEFAULT_USER_ID);
+    await storage.removeStarredArticle(articleId, userId);
   } else {
-    await storage.addStarredArticle(articleId, DEFAULT_USER_ID);
+    await storage.addStarredArticle(articleId, userId);
   }
 
   return jsonResponse({ articleId, starred: !isStarred }, corsHeaders);
@@ -570,14 +590,15 @@ async function handleToggleStar(articleId, env, corsHeaders) {
  * For simplicity with watermark tracking, just toggle a simple read list
  * (Watermark will be used for bulk "mark all as read" operations)
  */
-async function handleToggleRead(articleId, env, corsHeaders) {
+async function handleToggleRead(request, articleId, env, corsHeaders) {
   const storage = getStorage(env);
-  const isRead = await storage.isArticleRead(articleId, DEFAULT_USER_ID);
+  const userId = getUserId(request);
+  const isRead = await storage.isArticleRead(articleId, userId);
 
   if (isRead) {
-    await storage.removeReadArticle(articleId, DEFAULT_USER_ID);
+    await storage.removeReadArticle(articleId, userId);
   } else {
-    await storage.addReadArticle(articleId, DEFAULT_USER_ID);
+    await storage.addReadArticle(articleId, userId);
   }
 
   return jsonResponse({ articleId, read: !isRead }, corsHeaders);

@@ -279,10 +279,10 @@ export class Storage {
 
   /**
    * Get user subscriptions
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<Object>} Subscriptions object {feeds: [...]}
    */
-  async getUserSubscriptions(userId = DEFAULT_USER_ID) {
+  async getUserSubscriptions(userId) {
     const data = await this.kv.get(`user:${userId}:subscriptions`);
     if (!data) return { feeds: [] };
     return JSON.parse(data);
@@ -291,10 +291,10 @@ export class Storage {
   /**
    * Save user subscriptions
    * @param {Object} subscriptions - Subscriptions object
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async saveUserSubscriptions(subscriptions, userId = DEFAULT_USER_ID) {
+  async saveUserSubscriptions(subscriptions, userId) {
     await this.kv.put(
       `user:${userId}:subscriptions`,
       JSON.stringify(subscriptions)
@@ -304,10 +304,10 @@ export class Storage {
   /**
    * Add a subscription for a user
    * @param {string} feedId - Feed ID to subscribe to
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async addUserSubscription(feedId, userId = DEFAULT_USER_ID) {
+  async addUserSubscription(feedId, userId) {
     const subs = await this.getUserSubscriptions(userId);
 
     // Check if already subscribed
@@ -327,10 +327,10 @@ export class Storage {
   /**
    * Remove a subscription for a user
    * @param {string} feedId - Feed ID to unsubscribe from
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async removeUserSubscription(feedId, userId = DEFAULT_USER_ID) {
+  async removeUserSubscription(feedId, userId) {
     const subs = await this.getUserSubscriptions(userId);
     subs.feeds = subs.feeds.filter(f => f.feedId !== feedId);
     await this.saveUserSubscriptions(subs, userId);
@@ -340,10 +340,10 @@ export class Storage {
    * Update subscription watermark (caught up to timestamp)
    * @param {string} feedId - Feed ID
    * @param {number} timestamp - Watermark timestamp
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async updateSubscriptionWatermark(feedId, timestamp, userId = DEFAULT_USER_ID) {
+  async updateSubscriptionWatermark(feedId, timestamp, userId) {
     const subs = await this.getUserSubscriptions(userId);
     const sub = subs.feeds.find(f => f.feedId === feedId);
     if (sub) {
@@ -356,10 +356,10 @@ export class Storage {
    * Add article to manually read before list
    * @param {string} feedId - Feed ID
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async addManuallyReadBefore(feedId, articleId, userId = DEFAULT_USER_ID) {
+  async addManuallyReadBefore(feedId, articleId, userId) {
     const subs = await this.getUserSubscriptions(userId);
     const sub = subs.feeds.find(f => f.feedId === feedId);
     if (sub && !sub.manuallyReadBefore.includes(articleId)) {
@@ -372,10 +372,10 @@ export class Storage {
    * Remove article from manually read before list
    * @param {string} feedId - Feed ID
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async removeManuallyReadBefore(feedId, articleId, userId = DEFAULT_USER_ID) {
+  async removeManuallyReadBefore(feedId, articleId, userId) {
     const subs = await this.getUserSubscriptions(userId);
     const sub = subs.feeds.find(f => f.feedId === feedId);
     if (sub) {
@@ -390,10 +390,10 @@ export class Storage {
 
   /**
    * Get user starred articles
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<Object>} Starred object {articles: [...]}
    */
-  async getUserStarred(userId = DEFAULT_USER_ID) {
+  async getUserStarred(userId) {
     const data = await this.kv.get(`user:${userId}:starred`);
     if (!data) return { articles: [] };
     return JSON.parse(data);
@@ -402,10 +402,10 @@ export class Storage {
   /**
    * Add article to starred
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async addStarredArticle(articleId, userId = DEFAULT_USER_ID) {
+  async addStarredArticle(articleId, userId) {
     const starred = await this.getUserStarred(userId);
     if (!starred.articles.includes(articleId)) {
       starred.articles.push(articleId);
@@ -416,10 +416,10 @@ export class Storage {
   /**
    * Remove article from starred
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async removeStarredArticle(articleId, userId = DEFAULT_USER_ID) {
+  async removeStarredArticle(articleId, userId) {
     const starred = await this.getUserStarred(userId);
     starred.articles = starred.articles.filter(id => id !== articleId);
     await this.kv.put(`user:${userId}:starred`, JSON.stringify(starred));
@@ -428,10 +428,10 @@ export class Storage {
   /**
    * Check if article is starred
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<boolean>}
    */
-  async isArticleStarred(articleId, userId = DEFAULT_USER_ID) {
+  async isArticleStarred(articleId, userId) {
     const starred = await this.getUserStarred(userId);
     return starred.articles.includes(articleId);
   }
@@ -442,10 +442,10 @@ export class Storage {
 
   /**
    * Get user read articles
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<Object>} Read object {articles: [...]}
    */
-  async getUserRead(userId = DEFAULT_USER_ID) {
+  async getUserRead(userId) {
     const data = await this.kv.get(`user:${userId}:read`);
     if (!data) return { articles: [] };
     return JSON.parse(data);
@@ -454,10 +454,10 @@ export class Storage {
   /**
    * Add article to read list
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async addReadArticle(articleId, userId = DEFAULT_USER_ID) {
+  async addReadArticle(articleId, userId) {
     const read = await this.getUserRead(userId);
     if (!read.articles.includes(articleId)) {
       read.articles.push(articleId);
@@ -468,10 +468,10 @@ export class Storage {
   /**
    * Remove article from read list
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<void>}
    */
-  async removeReadArticle(articleId, userId = DEFAULT_USER_ID) {
+  async removeReadArticle(articleId, userId) {
     const read = await this.getUserRead(userId);
     read.articles = read.articles.filter(id => id !== articleId);
     await this.kv.put(`user:${userId}:read`, JSON.stringify(read));
@@ -480,10 +480,10 @@ export class Storage {
   /**
    * Check if article is read
    * @param {string} articleId - Article ID
-   * @param {string} userId - User ID
+   * @param {string} userId - User ID (required)
    * @returns {Promise<boolean>}
    */
-  async isArticleRead(articleId, userId = DEFAULT_USER_ID) {
+  async isArticleRead(articleId, userId) {
     const read = await this.getUserRead(userId);
     return read.articles.includes(articleId);
   }
