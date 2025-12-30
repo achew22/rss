@@ -252,6 +252,7 @@ async function handleAddFeed(request, env, corsHeaders) {
     title: item.title || "Untitled",
     excerpt: item.description || item.content || "",
     link: item.link || "",
+    commentsUrl: item.commentsUrl || "",
     source: newFeed.name,
     sourceUrl: url,
     timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -357,6 +358,7 @@ async function handleRefreshFeed(request, feedId, env, corsHeaders) {
         title: item.title || "Untitled",
         excerpt: item.description || item.content || "",
         link: item.link || "",
+        commentsUrl: item.commentsUrl || "",
         source: feedMeta.name,
         sourceUrl: feedMeta.url,
         timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -429,6 +431,7 @@ async function refreshAllFeeds(env) {
           title: item.title || "Untitled",
           excerpt: item.description || item.content || "",
           link: item.link || "",
+          commentsUrl: item.commentsUrl || "",
           source: feedMeta.name,
           sourceUrl: feedMeta.url,
           timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -657,13 +660,19 @@ function parseRssFeed(xml) {
 
   for (const match of itemMatches) {
     const itemXml = match[1];
+    // Extract comments URL (e.g., Hacker News uses <comments> tag)
+    const commentsUrl = extractTag(itemXml, "comments");
+
     items.push({
       title: cleanHtml(extractTag(itemXml, "title")),
+      // Use cleanHtml for description (plain text excerpt)
+      // Links in description are handled separately via commentsUrl
       description: cleanHtml(extractTag(itemXml, "description")),
       content: cleanHtml(
         extractTag(itemXml, "content:encoded") || extractTag(itemXml, "content")
       ),
       link: extractTag(itemXml, "link"),
+      commentsUrl: commentsUrl || "",
       pubDate: parseDate(
         extractTag(itemXml, "pubDate") || extractTag(itemXml, "dc:date")
       ),
@@ -703,6 +712,7 @@ function parseAtomFeed(xml) {
       description: cleanHtml(extractTag(entryXml, "summary")),
       content: cleanHtml(extractTag(entryXml, "content")),
       link: link,
+      commentsUrl: "", // Atom feeds typically don't have a separate comments URL
       pubDate: parseDate(
         extractTag(entryXml, "published") || extractTag(entryXml, "updated")
       ),
@@ -764,6 +774,175 @@ function cleanHtml(html) {
     .trim()
     // Truncate to reasonable length for excerpt
     .slice(0, 500);
+}
+
+/**
+ * Sanitize HTML using OWASP-style whitelist approach
+ * Only allows safe tags and attributes, strips everything else
+ */
+function sanitizeHtml(html) {
+  if (!html) return "";
+
+  // Decode HTML entities first
+  let decoded = html
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+
+  // Whitelist of allowed tags (OWASP recommendation: minimal set)
+  const allowedTags = new Set([
+    "a",
+    "p",
+    "br",
+    "b",
+    "strong",
+    "i",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+  ]);
+
+  // Whitelist of allowed attributes per tag
+  const allowedAttributes = {
+    a: ["href", "title"],
+  };
+
+  // Process HTML: parse tags and filter
+  let result = "";
+  let lastIndex = 0;
+
+  // Match all HTML tags (opening, closing, self-closing)
+  const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\s*([^>]*)?\/?>/g;
+  let match;
+
+  while ((match = tagRegex.exec(decoded)) !== null) {
+    // Add text before this tag
+    result += escapeHtmlText(decoded.slice(lastIndex, match.index));
+    lastIndex = match.index + match[0].length;
+
+    const fullMatch = match[0];
+    const tagName = match[1].toLowerCase();
+    const attributesStr = match[2] || "";
+    const isClosing = fullMatch.startsWith("</");
+    const isSelfClosing = fullMatch.endsWith("/>") || tagName === "br";
+
+    if (!allowedTags.has(tagName)) {
+      // Tag not allowed, skip it entirely
+      continue;
+    }
+
+    if (isClosing) {
+      result += `</${tagName}>`;
+    } else {
+      // Parse and filter attributes
+      const safeAttrs = parseAndFilterAttributes(
+        attributesStr,
+        tagName,
+        allowedAttributes
+      );
+
+      if (isSelfClosing || tagName === "br") {
+        result += `<${tagName}${safeAttrs} />`;
+      } else {
+        result += `<${tagName}${safeAttrs}>`;
+      }
+    }
+  }
+
+  // Add any remaining text after the last tag
+  result += escapeHtmlText(decoded.slice(lastIndex));
+
+  // Normalize whitespace and truncate
+  return result.replace(/\s+/g, " ").trim().slice(0, 1000);
+}
+
+/**
+ * Escape HTML special characters in text content
+ */
+function escapeHtmlText(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Parse attributes string and filter to only allowed attributes with safe values
+ */
+function parseAndFilterAttributes(attrStr, tagName, allowedAttributes) {
+  if (!attrStr || !allowedAttributes[tagName]) {
+    return "";
+  }
+
+  const allowed = allowedAttributes[tagName];
+  const result = [];
+
+  // Match attribute patterns: name="value" or name='value' or name=value
+  const attrRegex = /([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  let match;
+
+  while ((match = attrRegex.exec(attrStr)) !== null) {
+    const attrName = match[1].toLowerCase();
+    const attrValue = match[2] ?? match[3] ?? match[4] ?? "";
+
+    if (!allowed.includes(attrName)) {
+      continue;
+    }
+
+    // Special validation for href attribute (OWASP: prevent javascript: and data: URLs)
+    if (attrName === "href") {
+      const safeUrl = validateUrl(attrValue);
+      if (safeUrl) {
+        result.push(`${attrName}="${escapeHtmlText(safeUrl)}"`);
+      }
+    } else {
+      result.push(`${attrName}="${escapeHtmlText(attrValue)}"`);
+    }
+  }
+
+  return result.length > 0 ? " " + result.join(" ") : "";
+}
+
+/**
+ * Validate URL is safe (OWASP: only allow http/https protocols)
+ */
+function validateUrl(url) {
+  if (!url) return null;
+
+  // Trim and check for dangerous protocols
+  const trimmed = url.trim().toLowerCase();
+
+  // Block javascript:, data:, vbscript:, and other dangerous protocols
+  if (
+    trimmed.startsWith("javascript:") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("vbscript:") ||
+    trimmed.startsWith("file:")
+  ) {
+    return null;
+  }
+
+  // Allow http, https, and relative URLs
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("#") ||
+    (!trimmed.includes(":") && !trimmed.startsWith("//"))
+  ) {
+    return url.trim();
+  }
+
+  return null;
 }
 
 /**
