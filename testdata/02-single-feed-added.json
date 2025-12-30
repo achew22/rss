@@ -1,0 +1,17 @@
+{
+  "feeds": [
+    {
+      "id": "feed-1",
+      "name": "Test Feed",
+      "url": "https://example.com/feed",
+      "lastFetched": null
+    }
+  ],
+  "feed:feed-1": {
+    "id": "feed-1",
+    "name": "Test Feed",
+    "url": "https://example.com/feed",
+    "lastFetched": null,
+    "articles": []
+  }
+}

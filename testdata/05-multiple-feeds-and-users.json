@@ -1,0 +1,93 @@
+{
+  "feeds": [
+    {
+      "id": "feed-1",
+      "name": "Feed 1",
+      "url": "https://feed1.com",
+      "lastFetched": null
+    },
+    {
+      "id": "feed-2",
+      "name": "Feed 2",
+      "url": "https://feed2.com",
+      "lastFetched": null
+    }
+  ],
+  "feed:feed-1": {
+    "id": "feed-1",
+    "name": "Feed 1",
+    "url": "https://feed1.com",
+    "lastFetched": null,
+    "articles": [
+      {
+        "id": "article-1",
+        "timestamp": 1000
+      }
+    ]
+  },
+  "feed:feed-2": {
+    "id": "feed-2",
+    "name": "Feed 2",
+    "url": "https://feed2.com",
+    "lastFetched": null,
+    "articles": [
+      {
+        "id": "article-2",
+        "timestamp": 2000
+      }
+    ]
+  },
+  "user:user-1:subscriptions": {
+    "feeds": [
+      {
+        "feedId": "feed-1",
+        "caughtUpToTimestamp": 0,
+        "manuallyReadBefore": []
+      }
+    ]
+  },
+  "user:user-2:subscriptions": {
+    "feeds": [
+      {
+        "feedId": "feed-1",
+        "caughtUpToTimestamp": 0,
+        "manuallyReadBefore": []
+      },
+      {
+        "feedId": "feed-2",
+        "caughtUpToTimestamp": 0,
+        "manuallyReadBefore": []
+      }
+    ]
+  },
+  "feed:feed-1:article:article-1": {
+    "id": "article-1",
+    "feedId": "feed-1",
+    "title": "Article from Feed 1",
+    "excerpt": "Content",
+    "link": "https://feed1.com/article1",
+    "source": "Feed 1",
+    "sourceUrl": "https://feed1.com",
+    "timestamp": 1000
+  },
+  "feed:feed-2:article:article-2": {
+    "id": "article-2",
+    "feedId": "feed-2",
+    "title": "Article from Feed 2",
+    "excerpt": "Content",
+    "link": "https://feed2.com/article2",
+    "source": "Feed 2",
+    "sourceUrl": "https://feed2.com",
+    "timestamp": 2000
+  },
+  "user:user-1:starred": {
+    "articles": [
+      "article-1"
+    ]
+  },
+  "user:user-2:starred": {
+    "articles": [
+      "article-2"
+    ]
+  }
+}
