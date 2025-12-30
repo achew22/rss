@@ -7,6 +7,7 @@
  */
 
 import { Storage } from "./storage.js";
+import xss from "xss";
 
 /**
  * Get or create storage instance from env
@@ -252,6 +253,7 @@ async function handleAddFeed(request, env, corsHeaders) {
     title: item.title || "Untitled",
     excerpt: item.description || item.content || "",
     link: item.link || "",
+    commentsUrl: item.commentsUrl || "",
     source: newFeed.name,
     sourceUrl: url,
     timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -357,6 +359,7 @@ async function handleRefreshFeed(request, feedId, env, corsHeaders) {
         title: item.title || "Untitled",
         excerpt: item.description || item.content || "",
         link: item.link || "",
+        commentsUrl: item.commentsUrl || "",
         source: feedMeta.name,
         sourceUrl: feedMeta.url,
         timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -429,6 +432,7 @@ async function refreshAllFeeds(env) {
           title: item.title || "Untitled",
           excerpt: item.description || item.content || "",
           link: item.link || "",
+          commentsUrl: item.commentsUrl || "",
           source: feedMeta.name,
           sourceUrl: feedMeta.url,
           timestamp: new Date(item.pubDate || new Date()).getTime(),
@@ -657,13 +661,19 @@ function parseRssFeed(xml) {
 
   for (const match of itemMatches) {
     const itemXml = match[1];
+    // Extract comments URL (e.g., Hacker News uses <comments> tag)
+    const commentsUrl = extractTag(itemXml, "comments");
+
     items.push({
       title: cleanHtml(extractTag(itemXml, "title")),
+      // Use cleanHtml for description (plain text excerpt)
+      // Links in description are handled separately via commentsUrl
       description: cleanHtml(extractTag(itemXml, "description")),
       content: cleanHtml(
         extractTag(itemXml, "content:encoded") || extractTag(itemXml, "content")
       ),
       link: extractTag(itemXml, "link"),
+      commentsUrl: commentsUrl || "",
       pubDate: parseDate(
         extractTag(itemXml, "pubDate") || extractTag(itemXml, "dc:date")
       ),
@@ -703,6 +713,7 @@ function parseAtomFeed(xml) {
       description: cleanHtml(extractTag(entryXml, "summary")),
       content: cleanHtml(extractTag(entryXml, "content")),
       link: link,
+      commentsUrl: "", // Atom feeds typically don't have a separate comments URL
       pubDate: parseDate(
         extractTag(entryXml, "published") || extractTag(entryXml, "updated")
       ),
@@ -764,6 +775,74 @@ function cleanHtml(html) {
     .trim()
     // Truncate to reasonable length for excerpt
     .slice(0, 500);
+}
+
+/**
+ * Configure xss sanitizer with OWASP-style whitelist
+ * Uses the js-xss library (https://github.com/leizongmin/js-xss)
+ * which is a well-maintained, DOM-less HTML sanitizer
+ */
+const xssOptions = {
+  // Whitelist of allowed tags and their attributes
+  whiteList: {
+    a: ["href", "title", "target", "rel"],
+    p: [],
+    br: [],
+    b: [],
+    strong: [],
+    i: [],
+    em: [],
+    ul: [],
+    ol: [],
+    li: [],
+    blockquote: [],
+    code: [],
+    pre: [],
+  },
+  // Strip tags not in whitelist (don't escape them)
+  stripIgnoreTag: true,
+  // Also strip content of script/style tags
+  stripIgnoreTagBody: ["script", "style"],
+  // Custom attribute value filter for href to block dangerous protocols
+  onTagAttr: function (tag, name, value) {
+    if (tag === "a" && name === "href") {
+      // Block dangerous protocols
+      const trimmed = value.trim().toLowerCase();
+      if (
+        trimmed.startsWith("javascript:") ||
+        trimmed.startsWith("data:") ||
+        trimmed.startsWith("vbscript:") ||
+        trimmed.startsWith("file:")
+      ) {
+        return ""; // Remove the attribute
+      }
+    }
+    // Return undefined to use default processing
+  },
+};
+
+/**
+ * Sanitize HTML using js-xss library with OWASP-style whitelist
+ * @param {string} html - The HTML to sanitize
+ * @returns {string} - Sanitized HTML
+ */
+function sanitizeHtml(html) {
+  if (!html) return "";
+
+  // Decode HTML entities first
+  let decoded = html
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+
+  // Sanitize using js-xss with our whitelist configuration
+  const sanitized = xss(decoded, xssOptions);
+
+  // Normalize whitespace and truncate
+  return sanitized.replace(/\s+/g, " ").trim().slice(0, 1000);
 }
 
 /**

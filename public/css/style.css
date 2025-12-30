@@ -482,6 +482,16 @@ input {
     background-color: var(--color-border-light);
 }
 
+.article-comments-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    margin-left: auto;
+}
+
+.article-comments-link:hover {
+    text-decoration: underline;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;

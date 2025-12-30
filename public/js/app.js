@@ -250,6 +250,9 @@ function renderArticleCard(article) {
     const isStarred = state.starredArticles.has(article.id);
     const isRead = state.readArticles.has(article.id);
     const timeAgo = formatTimeAgo(new Date(article.date));
+    const commentsLink = article.commentsUrl
+        ? `<a href="${escapeHtml(article.commentsUrl)}" class="article-comments-link" target="_blank" rel="noopener noreferrer">Comments</a>`
+        : '';
 
     return `
         <article class="article-card${isRead ? '' : ' unread'}" data-id="${article.id}">
@@ -270,6 +273,7 @@ function renderArticleCard(article) {
                     ${escapeHtml(article.source)}
                 </span>
                 <span>${timeAgo}</span>
+                ${commentsLink}
             </div>
         </article>
     `;

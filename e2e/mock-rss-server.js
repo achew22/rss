@@ -35,6 +35,27 @@ const feeds = {
       },
     ],
   },
+  'hacker-news': {
+    title: 'Hacker News',
+    description: 'Links for the intellectually curious, ranked by readers.',
+    // HN-style feed with comments URLs
+    articles: [
+      {
+        title: 'Show HN: A New Way to Build Web Apps',
+        description: 'Comments', // HN description is just "Comments" linked
+        link: 'https://example.com/my-project',
+        commentsUrl: '/item?id=12345',
+        pubDate: new Date(Date.now() - 1000 * 60 * 30).toUTCString(), // 30 min ago
+      },
+      {
+        title: 'Why Rust is the Future of Systems Programming',
+        description: 'Comments',
+        link: 'https://blog.example.com/rust-future',
+        commentsUrl: '/item?id=12346',
+        pubDate: new Date(Date.now() - 1000 * 60 * 60).toUTCString(), // 1 hour ago
+      },
+    ],
+  },
   'web-dev': {
     title: 'Web Development Weekly',
     description: 'Tips, tricks, and tutorials for web developers',
@@ -98,14 +119,28 @@ function generateRssFeed(feedId, baseUrl) {
 
   const items = allArticles
     .map(
-      (article) => `
+      (article) => {
+        // Handle absolute links (e.g., external URLs)
+        const articleLink = article.link.startsWith('http')
+          ? article.link
+          : `${baseUrl}${article.link}`;
+        // Include <comments> tag if commentsUrl is provided (HN-style feeds)
+        const commentsTag = article.commentsUrl
+          ? `\n      <comments>${baseUrl}${article.commentsUrl}</comments>`
+          : '';
+        // For HN-style feeds, description contains a link to comments
+        const description = article.commentsUrl
+          ? `<a href="${baseUrl}${article.commentsUrl}">Comments</a>`
+          : article.description;
+        return `
     <item>
       <title>${escapeXml(article.title)}</title>
-      <description><![CDATA[${article.description}]]></description>
-      <link>${baseUrl}${article.link}</link>
+      <description><![CDATA[${description}]]></description>
+      <link>${articleLink}</link>
       <pubDate>${article.pubDate}</pubDate>
-      <guid>${baseUrl}${article.link}</guid>
-    </item>`
+      <guid>${articleLink}</guid>${commentsTag}
+    </item>`;
+      }
     )
     .join('\n');
 
