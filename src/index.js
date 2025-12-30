@@ -7,6 +7,7 @@
  */
 
 import { Storage } from "./storage.js";
+import xss from "xss";
 
 /**
  * Get or create storage instance from env
@@ -777,8 +778,53 @@ function cleanHtml(html) {
 }
 
 /**
- * Sanitize HTML using OWASP-style whitelist approach
- * Only allows safe tags and attributes, strips everything else
+ * Configure xss sanitizer with OWASP-style whitelist
+ * Uses the js-xss library (https://github.com/leizongmin/js-xss)
+ * which is a well-maintained, DOM-less HTML sanitizer
+ */
+const xssOptions = {
+  // Whitelist of allowed tags and their attributes
+  whiteList: {
+    a: ["href", "title", "target", "rel"],
+    p: [],
+    br: [],
+    b: [],
+    strong: [],
+    i: [],
+    em: [],
+    ul: [],
+    ol: [],
+    li: [],
+    blockquote: [],
+    code: [],
+    pre: [],
+  },
+  // Strip tags not in whitelist (don't escape them)
+  stripIgnoreTag: true,
+  // Also strip content of script/style tags
+  stripIgnoreTagBody: ["script", "style"],
+  // Custom attribute value filter for href to block dangerous protocols
+  onTagAttr: function (tag, name, value) {
+    if (tag === "a" && name === "href") {
+      // Block dangerous protocols
+      const trimmed = value.trim().toLowerCase();
+      if (
+        trimmed.startsWith("javascript:") ||
+        trimmed.startsWith("data:") ||
+        trimmed.startsWith("vbscript:") ||
+        trimmed.startsWith("file:")
+      ) {
+        return ""; // Remove the attribute
+      }
+    }
+    // Return undefined to use default processing
+  },
+};
+
+/**
+ * Sanitize HTML using js-xss library with OWASP-style whitelist
+ * @param {string} html - The HTML to sanitize
+ * @returns {string} - Sanitized HTML
  */
 function sanitizeHtml(html) {
   if (!html) return "";
@@ -792,157 +838,11 @@ function sanitizeHtml(html) {
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ");
 
-  // Whitelist of allowed tags (OWASP recommendation: minimal set)
-  const allowedTags = new Set([
-    "a",
-    "p",
-    "br",
-    "b",
-    "strong",
-    "i",
-    "em",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "code",
-    "pre",
-  ]);
-
-  // Whitelist of allowed attributes per tag
-  const allowedAttributes = {
-    a: ["href", "title"],
-  };
-
-  // Process HTML: parse tags and filter
-  let result = "";
-  let lastIndex = 0;
-
-  // Match all HTML tags (opening, closing, self-closing)
-  const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\s*([^>]*)?\/?>/g;
-  let match;
-
-  while ((match = tagRegex.exec(decoded)) !== null) {
-    // Add text before this tag
-    result += escapeHtmlText(decoded.slice(lastIndex, match.index));
-    lastIndex = match.index + match[0].length;
-
-    const fullMatch = match[0];
-    const tagName = match[1].toLowerCase();
-    const attributesStr = match[2] || "";
-    const isClosing = fullMatch.startsWith("</");
-    const isSelfClosing = fullMatch.endsWith("/>") || tagName === "br";
-
-    if (!allowedTags.has(tagName)) {
-      // Tag not allowed, skip it entirely
-      continue;
-    }
-
-    if (isClosing) {
-      result += `</${tagName}>`;
-    } else {
-      // Parse and filter attributes
-      const safeAttrs = parseAndFilterAttributes(
-        attributesStr,
-        tagName,
-        allowedAttributes
-      );
-
-      if (isSelfClosing || tagName === "br") {
-        result += `<${tagName}${safeAttrs} />`;
-      } else {
-        result += `<${tagName}${safeAttrs}>`;
-      }
-    }
-  }
-
-  // Add any remaining text after the last tag
-  result += escapeHtmlText(decoded.slice(lastIndex));
+  // Sanitize using js-xss with our whitelist configuration
+  const sanitized = xss(decoded, xssOptions);
 
   // Normalize whitespace and truncate
-  return result.replace(/\s+/g, " ").trim().slice(0, 1000);
-}
-
-/**
- * Escape HTML special characters in text content
- */
-function escapeHtmlText(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/**
- * Parse attributes string and filter to only allowed attributes with safe values
- */
-function parseAndFilterAttributes(attrStr, tagName, allowedAttributes) {
-  if (!attrStr || !allowedAttributes[tagName]) {
-    return "";
-  }
-
-  const allowed = allowedAttributes[tagName];
-  const result = [];
-
-  // Match attribute patterns: name="value" or name='value' or name=value
-  const attrRegex = /([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
-  let match;
-
-  while ((match = attrRegex.exec(attrStr)) !== null) {
-    const attrName = match[1].toLowerCase();
-    const attrValue = match[2] ?? match[3] ?? match[4] ?? "";
-
-    if (!allowed.includes(attrName)) {
-      continue;
-    }
-
-    // Special validation for href attribute (OWASP: prevent javascript: and data: URLs)
-    if (attrName === "href") {
-      const safeUrl = validateUrl(attrValue);
-      if (safeUrl) {
-        result.push(`${attrName}="${escapeHtmlText(safeUrl)}"`);
-      }
-    } else {
-      result.push(`${attrName}="${escapeHtmlText(attrValue)}"`);
-    }
-  }
-
-  return result.length > 0 ? " " + result.join(" ") : "";
-}
-
-/**
- * Validate URL is safe (OWASP: only allow http/https protocols)
- */
-function validateUrl(url) {
-  if (!url) return null;
-
-  // Trim and check for dangerous protocols
-  const trimmed = url.trim().toLowerCase();
-
-  // Block javascript:, data:, vbscript:, and other dangerous protocols
-  if (
-    trimmed.startsWith("javascript:") ||
-    trimmed.startsWith("data:") ||
-    trimmed.startsWith("vbscript:") ||
-    trimmed.startsWith("file:")
-  ) {
-    return null;
-  }
-
-  // Allow http, https, and relative URLs
-  if (
-    trimmed.startsWith("http://") ||
-    trimmed.startsWith("https://") ||
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("#") ||
-    (!trimmed.includes(":") && !trimmed.startsWith("//"))
-  ) {
-    return url.trim();
-  }
-
-  return null;
+  return sanitized.replace(/\s+/g, " ").trim().slice(0, 1000);
 }
 
 /**

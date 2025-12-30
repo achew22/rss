@@ -13,7 +13,7 @@ import {
   getWorkerUrl,
   getMockServerUrl,
 } from './helpers/test-setup.js';
-import { addFeed } from './test-helper.js';
+import { addFeed, getFeeds, deleteFeed } from './test-helper.js';
 import { waitForPageLoad, takeScreenshot } from './helpers/page-helpers.js';
 
 let workerUrl;
@@ -35,11 +35,20 @@ test.describe('Comments Link Tests', () => {
   });
 
   test('HN-style feed displays Comments link', async ({ page }) => {
+    // Delete existing HN feed if present (to ensure fresh articles with commentsUrl)
+    console.log('Checking for existing HN feed...');
+    const existingFeeds = await getFeeds(page);
+    const hnFeed = existingFeeds.feeds?.find(f => f.name === 'Hacker News');
+    if (hnFeed) {
+      console.log('Deleting existing HN feed:', hnFeed.id);
+      await deleteFeed(hnFeed.id, page);
+    }
+
     // Add HN-style feed that includes <comments> tags
     console.log('Adding HN-style feed via API...');
     const result = await addFeed(`${mockServerUrl}/feeds/hacker-news/rss`, 'Hacker News', page);
     console.log('Feed added:', JSON.stringify(result));
-    expect(result.feed || result.error).toBeDefined();
+    expect(result.feed).toBeDefined();
 
     // Navigate to app
     await waitForPageLoad(page, workerUrl);
@@ -75,20 +84,29 @@ test.describe('Comments Link Tests', () => {
   });
 
   test('regular feeds do not display Comments link', async ({ page }) => {
+    // Delete existing Web Dev feed if present (to ensure fresh test)
+    console.log('Checking for existing Web Dev feed...');
+    const existingFeeds = await getFeeds(page);
+    const webDevFeed = existingFeeds.feeds?.find(f => f.name === 'Web Dev');
+    if (webDevFeed) {
+      console.log('Deleting existing Web Dev feed:', webDevFeed.id);
+      await deleteFeed(webDevFeed.id, page);
+    }
+
     // Add regular feed without <comments> tags
     console.log('Adding regular feed via API...');
     const result = await addFeed(`${mockServerUrl}/feeds/web-dev/rss`, 'Web Dev', page);
     console.log('Feed added:', JSON.stringify(result));
-    expect(result.feed || result.error).toBeDefined();
+    expect(result.feed).toBeDefined();
 
     // Navigate to app and wait for the feed sidebar to populate
     await waitForPageLoad(page, workerUrl);
     await page.waitForTimeout(1000);
 
     // Click on Web Dev in sidebar to filter to only that feed's articles
-    const webDevFeed = page.locator('.feed-item', { hasText: 'Web Dev' });
-    await expect(webDevFeed).toBeVisible({ timeout: 5000 });
-    await webDevFeed.click();
+    const webDevFeedItem = page.locator('.feed-item', { hasText: 'Web Dev' });
+    await expect(webDevFeedItem).toBeVisible({ timeout: 5000 });
+    await webDevFeedItem.click();
     await page.waitForTimeout(500);
 
     // Get all visible article cards
