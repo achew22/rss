@@ -477,6 +477,8 @@ async function toggleRead(articleId) {
             state.manuallyUnreadArticles.add(articleId);
         }
 
+        renderUserFeeds();
+        updateCounts();
         renderHome();
     } catch (error) {
         console.error('Failed to toggle read status:', error);
@@ -485,7 +487,8 @@ async function toggleRead(articleId) {
 }
 
 function updateCounts() {
-    elements.allCount.textContent = state.articles.length;
+    const unreadCount = state.articles.filter(a => !state.readArticles.has(a.id)).length;
+    elements.allCount.textContent = unreadCount;
     elements.starredCount.textContent = state.starredArticles.size;
 }
 
@@ -510,6 +513,9 @@ async function autoMarkAsRead(articleId) {
                 const title = card.querySelector('.article-title');
                 if (title) title.style.fontWeight = '';
             }
+            // Update sidebar counts
+            renderUserFeeds();
+            updateCounts();
         }
     } catch (error) {
         console.error('Failed to auto-mark article as read:', error);
@@ -627,7 +633,12 @@ function showNotification(message, type = 'info') {
 // ============================================================================
 
 function renderUserFeeds() {
-    elements.userFeeds.innerHTML = state.feeds.map(feed => `
+    elements.userFeeds.innerHTML = state.feeds.map(feed => {
+        // Calculate unread count for this feed
+        const unreadCount = state.articles.filter(
+            a => a.feedId === feed.id && !state.readArticles.has(a.id)
+        ).length;
+        return `
         <li>
             <button class="feed-item" data-feed="${feed.id}">
                 <span class="feed-icon">
@@ -636,10 +647,10 @@ function renderUserFeeds() {
                     </svg>
                 </span>
                 <span class="feed-name">${escapeHtml(feed.name)}</span>
-                <span class="feed-count">${feed.count || 0}</span>
+                <span class="feed-count">${unreadCount}</span>
             </button>
         </li>
-    `).join('');
+    `}).join('');
 
     // Add click handlers
     elements.userFeeds.querySelectorAll('.feed-item').forEach(item => {
