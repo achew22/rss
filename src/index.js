@@ -6,9 +6,19 @@
  * and manages user state (starred articles).
  */
 
-// KV Keys
-const FEEDS_KEY = "feeds"; // Global registry of all feeds
+import { Storage } from "./storage.js";
+
 const DEFAULT_USER_ID = "default"; // Single user for now
+
+/**
+ * Get or create storage instance from env
+ */
+function getStorage(env) {
+  if (!env.RSS_STORE) {
+    throw new Error("RSS_STORE not available");
+  }
+  return new Storage(env.RSS_STORE);
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -141,8 +151,9 @@ async function handleApiRequest(request, url, env, ctx) {
  * Get all feeds (user's subscribed feeds)
  */
 async function handleGetFeeds(env, corsHeaders) {
-  const userSubs = await getUserSubscriptions(env);
-  const feeds = await getFeeds(env);
+  const storage = getStorage(env);
+  const userSubs = await storage.getUserSubscriptions(DEFAULT_USER_ID);
+  const feeds = await storage.getFeeds();
 
   // Get only feeds user is subscribed to
   const subscribedFeedIds = new Set(userSubs.feeds.map((sub) => sub.feedId));
@@ -150,7 +161,7 @@ async function handleGetFeeds(env, corsHeaders) {
 
   // Fetch feed indexes in parallel to get article counts
   const feedIndexes = await Promise.all(
-    subscribedFeeds.map((feed) => getFeed(env, feed.id))
+    subscribedFeeds.map((feed) => storage.getFeedIndex(feed.id))
   );
 
   // Calculate article counts per feed
@@ -166,6 +177,7 @@ async function handleGetFeeds(env, corsHeaders) {
  * Add a new feed
  */
 async function handleAddFeed(request, env, corsHeaders) {
+  const storage = getStorage(env);
   const body = await request.json();
   const { url, name } = body;
 
@@ -182,7 +194,7 @@ async function handleAddFeed(request, env, corsHeaders) {
   }
 
   // Check if feed already exists
-  const feeds = await getFeeds(env);
+  const feeds = await storage.getFeeds();
   if (feeds.some((f) => f.url === url)) {
     return jsonResponse({ error: "Feed already exists" }, corsHeaders, 409);
   }
@@ -208,18 +220,11 @@ async function handleAddFeed(request, env, corsHeaders) {
     lastFetched: new Date().toISOString(),
   };
 
-  // Save feed to global registry
-  feeds.push(newFeed);
-  await saveFeeds(env, feeds);
+  // Add feed (creates both global registry entry and feed index)
+  await storage.addFeed(newFeed);
 
   // Add to user's subscriptions with watermark at 0 (all articles unread)
-  const userSubs = await getUserSubscriptions(env);
-  userSubs.feeds.push({
-    feedId: newFeedId,
-    caughtUpToTimestamp: 0,
-    manuallyReadBefore: [],
-  });
-  await saveUserSubscriptions(env, userSubs);
+  await storage.addUserSubscription(newFeedId, DEFAULT_USER_ID);
 
   // Create articles from the feed
   const newArticles = parsedFeed.items.map((item) => ({
@@ -233,20 +238,10 @@ async function handleAddFeed(request, env, corsHeaders) {
     timestamp: new Date(item.pubDate || new Date()).getTime(),
   }));
 
-  // Save individual articles
-  await saveArticles(env, newArticles);
-
-  // Create feed index with article references (sorted DESC by timestamp)
-  const feedIndex = {
-    id: newFeedId,
-    name: newFeed.name,
-    url: newFeed.url,
-    lastFetched: newFeed.lastFetched,
-    articles: newArticles
-      .map((a) => ({ id: a.id, timestamp: a.timestamp }))
-      .sort((a, b) => b.timestamp - a.timestamp), // Newest first
-  };
-  await saveFeed(env, feedIndex);
+  // Save individual articles (automatically updates feed index)
+  for (const article of newArticles) {
+    await storage.saveArticle(article);
+  }
 
   // Return the new articles directly so the frontend can display them immediately
   const articlesWithStarred = newArticles.map((a) => ({
@@ -271,41 +266,36 @@ async function handleAddFeed(request, env, corsHeaders) {
  * Delete a feed
  */
 async function handleDeleteFeed(feedId, env, corsHeaders) {
-  const feeds = await getFeeds(env);
-  const feedIndex = feeds.findIndex((f) => f.id === feedId);
+  const storage = getStorage(env);
+  const feeds = await storage.getFeeds();
+  const feed = feeds.find((f) => f.id === feedId);
 
-  if (feedIndex === -1) {
+  if (!feed) {
     return jsonResponse({ error: "Feed not found" }, corsHeaders, 404);
   }
 
   // Get feed index to find all article IDs
-  const feed = await getFeed(env, feedId);
-  const articleIds = feed?.articles?.map((a) => a.id) || [];
+  const feedIndex = await storage.getFeedIndex(feedId);
+  const articleIds = feedIndex?.articles?.map((a) => a.id) || [];
 
-  // Delete individual articles (nested under feed)
-  await deleteArticlesForFeed(env, feedId, articleIds);
-
-  // Delete feed index
-  if (env.RSS_STORE) {
-    await env.RSS_STORE.delete(`feed:${feedId}`);
-  }
-
-  // Remove feed from global registry
-  feeds.splice(feedIndex, 1);
-  await saveFeeds(env, feeds);
+  // Remove feed (deletes feed, feed index, and all articles)
+  await storage.removeFeed(feedId);
 
   // Remove from user's subscriptions
-  const userSubs = await getUserSubscriptions(env);
-  userSubs.feeds = userSubs.feeds.filter((sub) => sub.feedId !== feedId);
-  await saveUserSubscriptions(env, userSubs);
+  await storage.removeUserSubscription(feedId, DEFAULT_USER_ID);
 
   // Remove starred status for deleted articles
   const articleIdsSet = new Set(articleIds);
-  const starred = await getUserStarred(env);
+  const starred = await storage.getUserStarred(DEFAULT_USER_ID);
   const remainingStarred = starred.articles.filter(
     (id) => !articleIdsSet.has(id)
   );
-  await saveUserStarred(env, { articles: remainingStarred });
+  if (env.RSS_STORE) {
+    await env.RSS_STORE.put(
+      `user:${DEFAULT_USER_ID}:starred`,
+      JSON.stringify({ articles: remainingStarred })
+    );
+  }
 
   return jsonResponse({ success: true }, corsHeaders);
 }
@@ -314,7 +304,8 @@ async function handleDeleteFeed(feedId, env, corsHeaders) {
  * Refresh a specific feed
  */
 async function handleRefreshFeed(feedId, env, corsHeaders) {
-  const feeds = await getFeeds(env);
+  const storage = getStorage(env);
+  const feeds = await storage.getFeeds();
   const feedMeta = feeds.find((f) => f.id === feedId);
 
   if (!feedMeta) {
@@ -323,17 +314,18 @@ async function handleRefreshFeed(feedId, env, corsHeaders) {
 
   try {
     const parsedFeed = await fetchAndParseFeed(feedMeta.url);
-    const feedIndex = await getFeed(env, feedId);
+    const feedIndex = await storage.getFeedIndex(feedId);
 
     if (!feedIndex) {
       return jsonResponse({ error: "Feed index not found" }, corsHeaders, 404);
     }
 
     // Get existing article links to avoid duplicates
-    const existingArticleData = await getArticles(
-      env,
-      feedIndex.articles.map((a) => ({ feedId: feedId, articleId: a.id }))
-    );
+    const articleRefs = feedIndex.articles.map((a) => ({
+      feedId: feedId,
+      articleId: a.id,
+    }));
+    const existingArticleData = await storage.getArticles(articleRefs);
     const existingLinks = new Set(existingArticleData.map((a) => a.link));
 
     // Create new articles
@@ -351,22 +343,16 @@ async function handleRefreshFeed(feedId, env, corsHeaders) {
       }));
 
     if (newArticles.length > 0) {
-      // Save individual articles
-      await saveArticles(env, newArticles);
-
-      // Update feed index by prepending new article references
-      feedIndex.articles.unshift(
-        ...newArticles.map((a) => ({ id: a.id, timestamp: a.timestamp }))
-      );
-      // Keep sorted DESC by timestamp
-      feedIndex.articles.sort((a, b) => b.timestamp - a.timestamp);
-      feedIndex.lastFetched = new Date().toISOString();
-      await saveFeed(env, feedIndex);
+      // Save individual articles (automatically updates feed index)
+      for (const article of newArticles) {
+        await storage.saveArticle(article);
+      }
     }
 
     // Update feed metadata's lastFetched
-    feedMeta.lastFetched = new Date().toISOString();
-    await saveFeeds(env, feeds);
+    await storage.updateFeedMetadata(feedId, {
+      lastFetched: new Date().toISOString(),
+    });
 
     return jsonResponse(
       {
@@ -389,13 +375,14 @@ async function handleRefreshFeed(feedId, env, corsHeaders) {
  * Used by both the API endpoint and scheduled cron handler
  */
 async function refreshAllFeeds(env) {
-  const feeds = await getFeeds(env);
+  const storage = getStorage(env);
+  const feeds = await storage.getFeeds();
   const results = [];
 
   for (const feedMeta of feeds) {
     try {
       const parsedFeed = await fetchAndParseFeed(feedMeta.url);
-      const feedIndex = await getFeed(env, feedMeta.id);
+      const feedIndex = await storage.getFeedIndex(feedMeta.id);
 
       if (!feedIndex) {
         results.push({
@@ -407,13 +394,11 @@ async function refreshAllFeeds(env) {
       }
 
       // Get existing article links to avoid duplicates
-      const existingArticleData = await getArticles(
-        env,
-        feedIndex.articles.map((a) => ({
-          feedId: feedMeta.id,
-          articleId: a.id,
-        }))
-      );
+      const articleRefs = feedIndex.articles.map((a) => ({
+        feedId: feedMeta.id,
+        articleId: a.id,
+      }));
+      const existingArticleData = await storage.getArticles(articleRefs);
       const existingLinks = new Set(existingArticleData.map((a) => a.link));
 
       const newArticles = parsedFeed.items
@@ -430,19 +415,17 @@ async function refreshAllFeeds(env) {
         }));
 
       if (newArticles.length > 0) {
-        // Save individual articles
-        await saveArticles(env, newArticles);
+        // Save individual articles (automatically updates feed index)
+        for (const article of newArticles) {
+          await storage.saveArticle(article);
+        }
 
-        // Update feed index
-        feedIndex.articles.unshift(
-          ...newArticles.map((a) => ({ id: a.id, timestamp: a.timestamp }))
-        );
-        feedIndex.articles.sort((a, b) => b.timestamp - a.timestamp);
-        feedIndex.lastFetched = new Date().toISOString();
-        await saveFeed(env, feedIndex);
+        // Update feed metadata's lastFetched
+        await storage.updateFeedMetadata(feedMeta.id, {
+          lastFetched: new Date().toISOString(),
+        });
       }
 
-      feedMeta.lastFetched = new Date().toISOString();
       results.push({
         feedId: feedMeta.id,
         name: feedMeta.name,
@@ -456,8 +439,6 @@ async function refreshAllFeeds(env) {
       });
     }
   }
-
-  await saveFeeds(env, feeds);
 
   return results;
 }
@@ -474,8 +455,9 @@ async function handleRefreshAll(env, corsHeaders) {
  * Get all articles
  */
 async function handleGetArticles(url, env, corsHeaders) {
-  const userSubs = await getUserSubscriptions(env);
-  const starred = await getUserStarred(env);
+  const storage = getStorage(env);
+  const userSubs = await storage.getUserSubscriptions(DEFAULT_USER_ID);
+  const starred = await storage.getUserStarred(DEFAULT_USER_ID);
   const starredSet = new Set(starred.articles);
 
   // Build subscription lookup map
@@ -495,7 +477,7 @@ async function handleGetArticles(url, env, corsHeaders) {
     // For starred view, need to find which feeds these articles belong to
     // Build article refs by checking subscribed feeds
     const allFeedIndexes = await Promise.all(
-      userSubs.feeds.map((sub) => getFeed(env, sub.feedId))
+      userSubs.feeds.map((sub) => storage.getFeedIndex(sub.feedId))
     );
     articleRefs = [];
     for (const feedIndex of allFeedIndexes) {
@@ -512,7 +494,7 @@ async function handleGetArticles(url, env, corsHeaders) {
     }
   } else if (feedId) {
     // Single feed view
-    const feedIndex = await getFeed(env, feedId);
+    const feedIndex = await storage.getFeedIndex(feedId);
     if (!feedIndex || !feedIndex.articles) {
       return jsonResponse({ articles: [] }, corsHeaders);
     }
@@ -525,7 +507,7 @@ async function handleGetArticles(url, env, corsHeaders) {
   } else {
     // All feeds view - use merge sort across subscribed feeds
     feedIndexes = await Promise.all(
-      userSubs.feeds.map((sub) => getFeed(env, sub.feedId))
+      userSubs.feeds.map((sub) => storage.getFeedIndex(sub.feedId))
     );
     // Filter out any null feeds
     feedIndexes = feedIndexes.filter((f) => f !== null);
@@ -543,16 +525,10 @@ async function handleGetArticles(url, env, corsHeaders) {
   }
 
   // Fetch the actual article data
-  const articles = await getArticles(env, articleRefs);
+  const articles = await storage.getArticles(articleRefs);
 
   // Get manual read list
-  let readData = null;
-  if (env.RSS_STORE) {
-    const data = await env.RSS_STORE.get(`user:default:read`);
-    readData = data ? JSON.parse(data) : { articles: [] };
-  } else {
-    readData = { articles: [] };
-  }
+  const readData = await storage.getUserRead(DEFAULT_USER_ID);
   const manualReadSet = new Set(readData.articles);
 
   // Add starred and read status to each article
@@ -577,21 +553,16 @@ async function handleGetArticles(url, env, corsHeaders) {
  * Toggle star status for an article
  */
 async function handleToggleStar(articleId, env, corsHeaders) {
-  const starred = await getUserStarred(env);
-  const starredSet = new Set(starred.articles);
+  const storage = getStorage(env);
+  const isStarred = await storage.isArticleStarred(articleId, DEFAULT_USER_ID);
 
-  let isStarred;
-  if (starredSet.has(articleId)) {
-    starredSet.delete(articleId);
-    isStarred = false;
+  if (isStarred) {
+    await storage.removeStarredArticle(articleId, DEFAULT_USER_ID);
   } else {
-    starredSet.add(articleId);
-    isStarred = true;
+    await storage.addStarredArticle(articleId, DEFAULT_USER_ID);
   }
 
-  await saveUserStarred(env, { articles: Array.from(starredSet) });
-
-  return jsonResponse({ articleId, starred: isStarred }, corsHeaders);
+  return jsonResponse({ articleId, starred: !isStarred }, corsHeaders);
 }
 
 /**
@@ -600,35 +571,16 @@ async function handleToggleStar(articleId, env, corsHeaders) {
  * (Watermark will be used for bulk "mark all as read" operations)
  */
 async function handleToggleRead(articleId, env, corsHeaders) {
-  // For now, use a simple per-user read list similar to starred
-  // TODO: Implement full watermark-based tracking
-  const userSubs = await getUserSubscriptions(env);
+  const storage = getStorage(env);
+  const isRead = await storage.isArticleRead(articleId, DEFAULT_USER_ID);
 
-  // Create a simple read tracking object if it doesn't exist
-  let readData = null;
-  if (env.RSS_STORE) {
-    const data = await env.RSS_STORE.get(`user:default:read`);
-    readData = data ? JSON.parse(data) : { articles: [] };
+  if (isRead) {
+    await storage.removeReadArticle(articleId, DEFAULT_USER_ID);
   } else {
-    readData = { articles: [] };
+    await storage.addReadArticle(articleId, DEFAULT_USER_ID);
   }
 
-  const readSet = new Set(readData.articles);
-  let isRead;
-
-  if (readSet.has(articleId)) {
-    readSet.delete(articleId);
-    isRead = false;
-  } else {
-    readSet.add(articleId);
-    isRead = true;
-  }
-
-  if (env.RSS_STORE) {
-    await env.RSS_STORE.put(`user:default:read`, JSON.stringify({ articles: Array.from(readSet) }));
-  }
-
-  return jsonResponse({ articleId, read: isRead }, corsHeaders);
+  return jsonResponse({ articleId, read: !isRead }, corsHeaders);
 }
 
 // ============================================================================
@@ -878,174 +830,8 @@ function mergeSortArticles(feedIndexes, newestFirst = true, limit = 50) {
 }
 
 // ============================================================================
-// KV Storage Helpers
+// Helper Functions
 // ============================================================================
-
-/**
- * Get feed metadata list
- * Returns array of feed objects (without article indexes)
- */
-async function getFeeds(env) {
-  if (!env.RSS_STORE) {
-    return [];
-  }
-  const data = await env.RSS_STORE.get(FEEDS_KEY);
-  return data ? JSON.parse(data) : [];
-}
-
-/**
- * Save feed metadata list
- */
-async function saveFeeds(env, feeds) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.put(FEEDS_KEY, JSON.stringify(feeds));
-}
-
-/**
- * Get a single feed with its article index
- * Returns: { id, name, url, lastFetched, articles: [{id, timestamp}] }
- */
-async function getFeed(env, feedId) {
-  if (!env.RSS_STORE) {
-    return null;
-  }
-  const data = await env.RSS_STORE.get(`feed:${feedId}`);
-  return data ? JSON.parse(data) : null;
-}
-
-/**
- * Save a single feed with its article index
- */
-async function saveFeed(env, feed) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.put(`feed:${feed.id}`, JSON.stringify(feed));
-}
-
-/**
- * Get a single article by ID
- * Articles are nested under their feed: feed:{feedId}:article:{articleId}
- */
-async function getArticle(env, feedId, articleId) {
-  if (!env.RSS_STORE) {
-    return null;
-  }
-  const data = await env.RSS_STORE.get(`feed:${feedId}:article:${articleId}`);
-  return data ? JSON.parse(data) : null;
-}
-
-/**
- * Get multiple articles by IDs with their feed IDs (parallel batch fetch)
- * @param {Array} articleRefs - Array of {feedId, articleId} objects
- */
-async function getArticles(env, articleRefs) {
-  if (!env.RSS_STORE || !articleRefs || articleRefs.length === 0) {
-    return [];
-  }
-  const articles = await Promise.all(
-    articleRefs.map((ref) => getArticle(env, ref.feedId, ref.articleId))
-  );
-  return articles.filter((a) => a !== null);
-}
-
-/**
- * Save a single article
- * Nested under feed: feed:{feedId}:article:{articleId}
- */
-async function saveArticle(env, article) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.put(
-    `feed:${article.feedId}:article:${article.id}`,
-    JSON.stringify(article)
-  );
-}
-
-/**
- * Save multiple articles (parallel batch write)
- */
-async function saveArticles(env, articles) {
-  if (!env.RSS_STORE || !articles || articles.length === 0) {
-    return;
-  }
-  await Promise.all(articles.map((article) => saveArticle(env, article)));
-}
-
-/**
- * Delete a single article
- */
-async function deleteArticle(env, feedId, articleId) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.delete(`feed:${feedId}:article:${articleId}`);
-}
-
-/**
- * Delete all articles for a feed
- */
-async function deleteArticlesForFeed(env, feedId, articleIds) {
-  if (!env.RSS_STORE || !articleIds || articleIds.length === 0) {
-    return;
-  }
-  await Promise.all(
-    articleIds.map((articleId) => deleteArticle(env, feedId, articleId))
-  );
-}
-
-/**
- * Get user subscriptions
- * Returns object: {
- *   feeds: [{
- *     feedId,
- *     caughtUpToTimestamp,
- *     manuallyReadBefore: [articleId, ...]
- *   }]
- * }
- */
-async function getUserSubscriptions(env, userId = DEFAULT_USER_ID) {
-  if (!env.RSS_STORE) {
-    return { feeds: [] };
-  }
-  const data = await env.RSS_STORE.get(`user:${userId}:subscriptions`);
-  return data ? JSON.parse(data) : { feeds: [] };
-}
-
-/**
- * Save user subscriptions
- */
-async function saveUserSubscriptions(env, subscriptions, userId = DEFAULT_USER_ID) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.put(`user:${userId}:subscriptions`, JSON.stringify(subscriptions));
-}
-
-/**
- * Get user starred articles
- * Returns object: {articles: [articleId, ...]}
- */
-async function getUserStarred(env, userId = DEFAULT_USER_ID) {
-  if (!env.RSS_STORE) {
-    return { articles: [] };
-  }
-  const data = await env.RSS_STORE.get(`user:${userId}:starred`);
-  return data ? JSON.parse(data) : { articles: [] };
-}
-
-/**
- * Save user starred articles
- */
-async function saveUserStarred(env, starred, userId = DEFAULT_USER_ID) {
-  if (!env.RSS_STORE) {
-    return;
-  }
-  await env.RSS_STORE.put(`user:${userId}:starred`, JSON.stringify(starred));
-}
 
 /**
  * Check if an article is read based on user's watermark + exceptions
