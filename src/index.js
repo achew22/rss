@@ -210,9 +210,12 @@ async function handleAddFeed(request, env, corsHeaders) {
     return jsonResponse({ error: "Invalid URL" }, corsHeaders, 400);
   }
 
-  // Check if feed already exists
+  // Generate feed ID from normalized URL hash
+  const newFeedId = await generateFeedId(url);
+
+  // Check if feed already exists (by ID, since ID is derived from URL)
   const feeds = await storage.getFeeds();
-  if (feeds.some((f) => f.url === url)) {
+  if (feeds.some((f) => f.id === newFeedId)) {
     return jsonResponse({ error: "Feed already exists" }, corsHeaders, 409);
   }
 
@@ -229,7 +232,6 @@ async function handleAddFeed(request, env, corsHeaders) {
   }
 
   // Create new feed entry
-  const newFeedId = generateId();
   const newFeed = {
     id: newFeedId,
     name: name || parsedFeed.title || feedUrl.hostname,
@@ -877,10 +879,59 @@ function isArticleRead(subscription, articleId, articleTimestamp) {
 // ============================================================================
 
 /**
- * Generate a unique ID
+ * Generate a unique ID (for articles)
  */
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Normalize a URL for consistent hashing
+ * - Lowercases hostname
+ * - Removes trailing slashes from path
+ * - Sorts query parameters
+ * - Removes default ports
+ */
+function normalizeUrl(urlString) {
+  const url = new URL(urlString);
+
+  // Lowercase hostname
+  url.hostname = url.hostname.toLowerCase();
+
+  // Remove default ports
+  if (
+    (url.protocol === "http:" && url.port === "80") ||
+    (url.protocol === "https:" && url.port === "443")
+  ) {
+    url.port = "";
+  }
+
+  // Remove trailing slash from path (unless it's just "/")
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+    url.pathname = url.pathname.slice(0, -1);
+  }
+
+  // Sort query parameters for consistency
+  const params = new URLSearchParams(url.search);
+  const sortedParams = new URLSearchParams([...params.entries()].sort());
+  url.search = sortedParams.toString();
+
+  return url.toString();
+}
+
+/**
+ * Generate a feed ID by hashing the normalized URL
+ * Returns a hex string (first 16 chars of SHA-256 hash)
+ */
+async function generateFeedId(feedUrl) {
+  const normalized = normalizeUrl(feedUrl);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Use first 16 characters (64 bits) for a reasonable ID length
+  return hashHex.slice(0, 16);
 }
 
 /**
