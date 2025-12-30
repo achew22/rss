@@ -9,6 +9,10 @@ export default defineWorkersConfig({
         miniflare: {
           // Provide a mock KV namespace for testing
           kvNamespaces: ["RSS_STORE"],
+          // Set AUTH_MODE to 'local' for testing (bypasses Google OAuth)
+          bindings: {
+            AUTH_MODE: "local",
+          },
         },
       },
     },
