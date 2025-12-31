@@ -29,7 +29,8 @@ function getStorage(env) {
  */
 function getAuthProvider(env) {
   // Use environment variable to determine which auth provider to use
-  const authMode = env.AUTH_MODE || 'local';
+  // DEFAULT to 'google' for security - never expose unauthenticated!
+  const authMode = env.AUTH_MODE || 'google';
 
   switch (authMode) {
     case 'google':
@@ -37,8 +38,11 @@ function getAuthProvider(env) {
     case 'fake':
       return new FakeAuthProvider();
     case 'local':
-    default:
       return new LocalDevAuthProvider();
+    default:
+      // If invalid mode specified, fail securely with Google OAuth
+      console.warn(`Invalid AUTH_MODE: ${authMode}, defaulting to google`);
+      return new GoogleOAuthProvider(env);
   }
 }
 

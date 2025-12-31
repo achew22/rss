@@ -194,12 +194,29 @@ This is normal for apps in development/testing.
 
 ## Local Development
 
-For local development, you can use the **Fake Auth Provider** which doesn't require Google OAuth:
+**IMPORTANT**: By default, the app uses Google OAuth for security. For local development without setting up Google OAuth, you need to explicitly set `AUTH_MODE`.
 
-1. Don't set `AUTH_MODE` environment variable (or set it to `local` or `fake`)
+### Option 1: Fake Auth (Recommended for Testing)
+
+1. Create a `.dev.vars` file in your project root:
+
+```bash
+# .dev.vars
+AUTH_MODE=fake
+```
+
 2. Start your development server: `npm run dev`
 3. Visit `http://localhost:8787`
 4. You'll see a simple login form with test users
+
+### Option 2: Local Dev (No Auth - Use with Caution)
+
+**⚠️ WARNING**: This mode bypasses all authentication. Only use on `localhost`, never deploy with this setting!
+
+```bash
+# .dev.vars
+AUTH_MODE=local
+```
 
 To test Google OAuth locally:
 
