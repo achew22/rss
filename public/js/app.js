@@ -596,7 +596,7 @@ function formatTimeAgo(date) {
 
 function escapeHtml(text) {
     if (!text) return '';
-    return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+    return DOMPurify.sanitize(text);
 }
 
 function showNotification(message, type = 'info') {
