@@ -744,26 +744,11 @@ function extractTag(xml, tagName, parentTag = null) {
 }
 
 /**
- * Clean HTML content and extract plain text
+ * Pass through HTML content - frontend handles all sanitization with DOMPurify
  */
 function cleanHtml(html) {
   if (!html) return "";
-
-  return html
-    // Decode common HTML entities
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, "")
-    // Normalize whitespace
-    .replace(/\s+/g, " ")
-    .trim()
-    // Truncate to reasonable length for excerpt
-    .slice(0, 500);
+  return html.slice(0, 500);
 }
 
 /**
