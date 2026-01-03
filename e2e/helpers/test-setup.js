@@ -56,10 +56,13 @@ export function getMockServerUrl() {
   return process.env.E2E_MOCK_SERVER_URL || 'http://localhost:3001';
 }
 
+export { getMockServer };
+
 export default {
   setupTestEnvironment,
   teardownTestEnvironment,
   resetTestData,
   getWorkerUrl,
   getMockServerUrl,
+  getMockServer,
 };

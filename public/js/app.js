@@ -596,9 +596,7 @@ function formatTimeAgo(date) {
 
 function escapeHtml(text) {
     if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return DOMPurify.sanitize(text);
 }
 
 function showNotification(message, type = 'info') {
